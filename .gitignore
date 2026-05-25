@@ -1,0 +1,8 @@
+bin/
+obj/
+.vs/
+*.user
+hotel_reservation.db
+hotel_reservation.db-shm
+hotel_reservation.db-wal
+hotel_reservation_database.xml
