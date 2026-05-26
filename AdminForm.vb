@@ -67,19 +67,19 @@ Namespace HotelReservation
             Dim refreshButton = MakeButton("Refresh")
             refreshButton.Width = 120
             refreshButton.Height = 34
-            refreshButton.Location = New Point(0, 76)
+            refreshButton.Anchor = AnchorStyles.Top Or AnchorStyles.Right
             AddHandler refreshButton.Click, AddressOf RefreshClicked
 
             Dim logoutButton = MakeButton("Log out")
             logoutButton.Width = 120
             logoutButton.Height = 34
-            logoutButton.Location = New Point(130, 76)
+            logoutButton.Anchor = AnchorStyles.Top Or AnchorStyles.Right
             AddHandler logoutButton.Click, AddressOf LogoutClicked
 
             Dim confirmButton = MakeButton("Confirm Selected")
             confirmButton.Width = 160
             confirmButton.Height = 34
-            confirmButton.Location = New Point(260, 76)
+            confirmButton.Anchor = AnchorStyles.Top Or AnchorStyles.Right
             AddHandler confirmButton.Click, AddressOf ConfirmSelectedClicked
 
             header.Controls.Add(confirmButton)
@@ -87,6 +87,10 @@ Namespace HotelReservation
             header.Controls.Add(refreshButton)
             header.Controls.Add(subtitle)
             header.Controls.Add(title)
+            PositionHeaderButtons(header, refreshButton, logoutButton, confirmButton)
+            AddHandler header.Resize, Sub(sender, e)
+                                          PositionHeaderButtons(header, refreshButton, logoutButton, confirmButton)
+                                      End Sub
             root.Controls.Add(header, 0, 0)
 
             Dim tabs = New TabControl With {.Dock = DockStyle.Fill}
@@ -141,6 +145,14 @@ Namespace HotelReservation
 
         Private Sub RefreshClicked(sender As Object, e As EventArgs)
             RefreshDashboard()
+        End Sub
+
+        Private Sub PositionHeaderButtons(header As Control, refreshButton As Button, logoutButton As Button, confirmButton As Button)
+            Dim gap = 10
+            Dim y = 72
+            logoutButton.Location = New Point(header.ClientSize.Width - logoutButton.Width, y)
+            confirmButton.Location = New Point(logoutButton.Left - confirmButton.Width - gap, y)
+            refreshButton.Location = New Point(confirmButton.Left - refreshButton.Width - gap, y)
         End Sub
 
         Private Sub LogoutClicked(sender As Object, e As EventArgs)

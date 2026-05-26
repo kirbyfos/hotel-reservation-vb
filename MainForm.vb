@@ -14,6 +14,7 @@ Namespace HotelReservation
         Private ReadOnly _rooms As New List(Of RoomInfo)()
         Private ReadOnly _addOns As New List(Of AddOnInfo)()
         Private ReadOnly _addOnInputs As New Dictionary(Of Integer, NumericUpDown)()
+        Private ReadOnly _addOnChecks As New Dictionary(Of Integer, CheckBox)()
         Private _latestReceipt As ReceiptInfo
 
         Private ReadOnly _cream As Color = Color.FromArgb(247, 239, 227)
@@ -124,13 +125,17 @@ Namespace HotelReservation
             }
 
             Dim logoutButton = MakeButton("Log out")
-            logoutButton.Dock = DockStyle.Right
-            logoutButton.Width = 130
+            logoutButton.Size = New Size(110, 34)
+            logoutButton.Anchor = AnchorStyles.Top Or AnchorStyles.Right
+            logoutButton.Location = New Point(panel.Width - logoutButton.Width - 4, 8)
             AddHandler logoutButton.Click, AddressOf LogoutClicked
 
             panel.Controls.Add(logoutButton)
             panel.Controls.Add(subtitle)
             panel.Controls.Add(title)
+            AddHandler panel.Resize, Sub(sender, e)
+                                         logoutButton.Location = New Point(panel.ClientSize.Width - logoutButton.Width - 4, 8)
+                                     End Sub
             Return panel
         End Function
 
@@ -607,18 +612,26 @@ Namespace HotelReservation
         Private Sub RenderAddOns()
             _addOnsPanel.Controls.Clear()
             _addOnInputs.Clear()
+            _addOnChecks.Clear()
 
             For Each addOn In _addOns
                 Dim row = New TableLayoutPanel With {
                     .Width = 620,
-                    .Height = 58,
-                    .ColumnCount = 2,
+                    .Height = 64,
+                    .ColumnCount = 3,
                     .Margin = New Padding(0, 0, 0, 8),
                     .BackColor = _sand,
                     .Padding = New Padding(10)
                 }
-                row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 78))
-                row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 22))
+                row.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 36))
+                row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 72))
+                row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 28))
+
+                Dim selectedCheck = New CheckBox With {
+                    .Dock = DockStyle.Fill,
+                    .Text = "",
+                    .TextAlign = ContentAlignment.MiddleCenter
+                }
 
                 Dim text = New Label With {
                     .Text = $"{addOn.Name} - {addOn.Description} ({addOn.Price:C2})",
@@ -629,13 +642,25 @@ Namespace HotelReservation
                 Dim quantity = New NumericUpDown With {
                     .Minimum = 0,
                     .Maximum = 10,
+                    .Value = 1,
+                    .Enabled = False,
                     .Dock = DockStyle.Fill
                 }
                 AddHandler quantity.ValueChanged, AddressOf TotalChanged
+                AddHandler selectedCheck.CheckedChanged,
+                    Sub(sender, e)
+                        quantity.Enabled = selectedCheck.Checked
+                        If selectedCheck.Checked AndAlso quantity.Value = 0 Then
+                            quantity.Value = 1
+                        End If
+                        UpdateTotalPreview()
+                    End Sub
 
-                row.Controls.Add(text, 0, 0)
-                row.Controls.Add(quantity, 1, 0)
+                row.Controls.Add(selectedCheck, 0, 0)
+                row.Controls.Add(text, 1, 0)
+                row.Controls.Add(quantity, 2, 0)
                 _addOnsPanel.Controls.Add(row)
+                _addOnChecks(addOn.Id) = selectedCheck
                 _addOnInputs(addOn.Id) = quantity
             Next
         End Sub
@@ -643,7 +668,7 @@ Namespace HotelReservation
         Private Function CollectSelectedAddOns() As List(Of SelectedAddOn)
             Dim selected As New List(Of SelectedAddOn)()
             For Each pair In _addOnInputs
-                If pair.Value.Value > 0 Then
+                If _addOnChecks.ContainsKey(pair.Key) AndAlso _addOnChecks(pair.Key).Checked AndAlso pair.Value.Value > 0 Then
                     selected.Add(New SelectedAddOn With {.AddOnId = pair.Key, .Quantity = CInt(pair.Value.Value)})
                 End If
             Next
@@ -653,7 +678,12 @@ Namespace HotelReservation
 
         Private Sub ResetAddOnQuantities()
             For Each quantityInput In _addOnInputs.Values
-                quantityInput.Value = 0
+                quantityInput.Value = 1
+                quantityInput.Enabled = False
+            Next
+
+            For Each selectedCheck In _addOnChecks.Values
+                selectedCheck.Checked = False
             Next
         End Sub
 
@@ -664,7 +694,7 @@ Namespace HotelReservation
             Dim addOnSubtotal = 0D
 
             For Each addOn In _addOns
-                If _addOnInputs.ContainsKey(addOn.Id) Then
+                If _addOnInputs.ContainsKey(addOn.Id) AndAlso _addOnChecks.ContainsKey(addOn.Id) AndAlso _addOnChecks(addOn.Id).Checked Then
                     addOnSubtotal += addOn.Price * _addOnInputs(addOn.Id).Value
                 End If
             Next

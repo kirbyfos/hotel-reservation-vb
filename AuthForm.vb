@@ -71,8 +71,8 @@ Namespace HotelReservation
         End Sub
 
         Private Sub BuildLoginTab(tab As TabPage)
-            Dim panel = New TableLayoutPanel With {.Dock = DockStyle.Top, .ColumnCount = 1, .RowCount = 4, .Height = 252}
-            For index = 0 To 3
+            Dim panel = New TableLayoutPanel With {.Dock = DockStyle.Top, .ColumnCount = 1, .RowCount = 3, .Height = 194}
+            For index = 0 To 2
                 panel.RowStyles.Add(New RowStyle(SizeType.Absolute, 58))
             Next
             tab.Controls.Add(panel)
@@ -86,13 +86,6 @@ Namespace HotelReservation
             Dim loginButton = MakeButton("Login")
             AddHandler loginButton.Click, AddressOf LoginClicked
             panel.Controls.Add(loginButton, 0, 2)
-
-            Dim note = New Label With {
-                .Text = "Default admin account: username admin / password admin123",
-                .Dock = DockStyle.Fill,
-                .ForeColor = _muted
-            }
-            panel.Controls.Add(note, 0, 3)
         End Sub
 
         Private Sub BuildRegisterTab(tab As TabPage)
