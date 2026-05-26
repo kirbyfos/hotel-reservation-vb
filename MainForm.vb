@@ -27,13 +27,17 @@ Namespace HotelReservation
 
         Private _checkInPicker As DateTimePicker
         Private _checkOutPicker As DateTimePicker
-        Private _guestCount As NumericUpDown
+        Private _availabilityAdults As NumericUpDown
+        Private _availabilityChildren As NumericUpDown
+        Private _availabilityFreeChildren As NumericUpDown
         Private _availabilityLabel As Label
         Private _roomsPanel As FlowLayoutPanel
         Private _roomCombo As ComboBox
         Private _bookingCheckInPicker As DateTimePicker
         Private _bookingCheckOutPicker As DateTimePicker
-        Private _bookingGuests As NumericUpDown
+        Private _bookingAdults As NumericUpDown
+        Private _bookingChildren As NumericUpDown
+        Private _bookingFreeChildren As NumericUpDown
         Private _guestNameText As TextBox
         Private _emailText As TextBox
         Private _phoneText As TextBox
@@ -153,26 +157,31 @@ Namespace HotelReservation
             Dim inputs = New TableLayoutPanel With {
                 .Dock = DockStyle.Top,
                 .ColumnCount = 2,
-                .Height = 154,
+                .Height = 218,
                 .Padding = New Padding(0, 8, 0, 0)
             }
             inputs.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
             inputs.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
             inputs.RowStyles.Add(New RowStyle(SizeType.Absolute, 64))
             inputs.RowStyles.Add(New RowStyle(SizeType.Absolute, 64))
+            inputs.RowStyles.Add(New RowStyle(SizeType.Absolute, 64))
             panel.Controls.Add(inputs)
 
             _checkInPicker = New DateTimePicker With {.Format = DateTimePickerFormat.Short, .Dock = DockStyle.Fill}
             _checkOutPicker = New DateTimePicker With {.Format = DateTimePickerFormat.Short, .Dock = DockStyle.Fill}
-            _guestCount = New NumericUpDown With {.Minimum = 1, .Maximum = 20, .Value = 2, .Dock = DockStyle.Fill}
+            _availabilityAdults = New NumericUpDown With {.Minimum = 1, .Maximum = 20, .Value = 2, .Dock = DockStyle.Fill}
+            _availabilityChildren = New NumericUpDown With {.Minimum = 0, .Maximum = 20, .Value = 0, .Dock = DockStyle.Fill}
+            _availabilityFreeChildren = New NumericUpDown With {.Minimum = 0, .Maximum = 20, .Value = 0, .Dock = DockStyle.Fill}
 
             inputs.Controls.Add(WrapField("Check-in", _checkInPicker), 0, 0)
             inputs.Controls.Add(WrapField("Check-out", _checkOutPicker), 1, 0)
-            inputs.Controls.Add(WrapField("Number of guests", _guestCount), 0, 1)
+            inputs.Controls.Add(WrapField("Adults", _availabilityAdults), 0, 1)
+            inputs.Controls.Add(WrapField("Children 4+ years old", _availabilityChildren), 1, 1)
+            inputs.Controls.Add(WrapField("Children 1-3 years old (free pax)", _availabilityFreeChildren), 0, 2)
 
             Dim checkButton = MakeButton("Check Availability")
             AddHandler checkButton.Click, AddressOf CheckAvailabilityClicked
-            inputs.Controls.Add(checkButton, 1, 1)
+            inputs.Controls.Add(checkButton, 1, 2)
 
             _availabilityLabel = New Label With {
                 .Text = "Choose dates to see on-time room status.",
@@ -206,15 +215,20 @@ Namespace HotelReservation
 
             _bookingCheckInPicker = New DateTimePicker With {.Format = DateTimePickerFormat.Short, .Dock = DockStyle.Fill}
             _bookingCheckOutPicker = New DateTimePicker With {.Format = DateTimePickerFormat.Short, .Dock = DockStyle.Fill}
-            _bookingGuests = New NumericUpDown With {.Minimum = 1, .Maximum = 20, .Value = 2, .Dock = DockStyle.Fill}
+            _bookingAdults = New NumericUpDown With {.Minimum = 1, .Maximum = 20, .Value = 2, .Dock = DockStyle.Fill}
+            _bookingChildren = New NumericUpDown With {.Minimum = 0, .Maximum = 20, .Value = 0, .Dock = DockStyle.Fill}
+            _bookingFreeChildren = New NumericUpDown With {.Minimum = 0, .Maximum = 20, .Value = 0, .Dock = DockStyle.Fill}
             AddHandler _bookingCheckInPicker.ValueChanged, AddressOf TotalChanged
             AddHandler _bookingCheckOutPicker.ValueChanged, AddressOf TotalChanged
-            AddHandler _bookingGuests.ValueChanged, AddressOf BookingGuestsChanged
+            AddHandler _bookingAdults.ValueChanged, AddressOf BookingGuestsChanged
+            AddHandler _bookingChildren.ValueChanged, AddressOf BookingGuestsChanged
 
             panel.Controls.Add(MakeSectionLabel("Booking details"))
             panel.Controls.Add(MakeTwoColumnGrid(
                 WrapField("Room", _roomCombo),
-                WrapField("Guests", _bookingGuests),
+                WrapField("Adults", _bookingAdults),
+                WrapField("Children 4+ years old", _bookingChildren),
+                WrapField("Children 1-3 years old (free pax)", _bookingFreeChildren),
                 WrapField("Check-in", _bookingCheckInPicker),
                 WrapField("Check-out", _bookingCheckOutPicker)))
 
@@ -262,7 +276,7 @@ Namespace HotelReservation
             panel.Controls.Add(_totalLabel)
 
             Dim actionPanel = New FlowLayoutPanel With {.Dock = DockStyle.Top, .Height = 54, .FlowDirection = FlowDirection.LeftToRight}
-            Dim reserveButton = MakeButton("Confirm Reservation")
+            Dim reserveButton = MakeButton("Queue Reservation")
             AddHandler reserveButton.Click, AddressOf ConfirmReservationClicked
             Dim printButton = MakeButton("Print Latest Receipt")
             AddHandler printButton.Click, AddressOf PrintLatestReceiptClicked
@@ -302,6 +316,7 @@ Namespace HotelReservation
             _historyList.Columns.Add("Guest", 200)
             _historyList.Columns.Add("Room", 170)
             _historyList.Columns.Add("Dates", 210)
+            _historyList.Columns.Add("Guests", 180)
             _historyList.Columns.Add("Total", 130)
             _historyList.Columns.Add("Status", 120)
             panel.Controls.Add(_historyList)
@@ -358,11 +373,14 @@ Namespace HotelReservation
         Private Sub CheckAvailabilityClicked(sender As Object, e As EventArgs)
             _bookingCheckInPicker.Value = _checkInPicker.Value.Date
             _bookingCheckOutPicker.Value = _checkOutPicker.Value.Date
-            _bookingGuests.Value = _guestCount.Value
+            _bookingAdults.Value = _availabilityAdults.Value
+            _bookingChildren.Value = _availabilityChildren.Value
+            _bookingFreeChildren.Value = _availabilityFreeChildren.Value
             RefreshRooms()
 
-            Dim availableCount = _rooms.Where(Function(room) room.IsAvailable AndAlso room.Capacity >= CInt(_guestCount.Value)).Count()
-            _availabilityLabel.Text = $"{availableCount} available room(s) found for {_guestCount.Value} guest(s)."
+            Dim chargeableGuests = CInt(_availabilityAdults.Value + _availabilityChildren.Value)
+            Dim availableCount = _rooms.Where(Function(room) room.IsAvailable AndAlso room.Capacity >= chargeableGuests).Count()
+            _availabilityLabel.Text = String.Format("{0} available room(s) found for {1} charged pax. Children ages 1-3 are free pax.", availableCount, chargeableGuests)
         End Sub
 
         Private Sub ConfirmReservationClicked(sender As Object, e As EventArgs)
@@ -377,7 +395,9 @@ Namespace HotelReservation
                     .RoomId = selectedRoom.Id,
                     .CheckIn = _bookingCheckInPicker.Value.Date,
                     .CheckOut = _bookingCheckOutPicker.Value.Date,
-                    .Guests = CInt(_bookingGuests.Value),
+                    .AdultGuests = CInt(_bookingAdults.Value),
+                    .ChildGuests = CInt(_bookingChildren.Value),
+                    .FreeChildGuests = CInt(_bookingFreeChildren.Value),
                     .GuestName = _guestNameText.Text,
                     .Email = _emailText.Text,
                     .Phone = _phoneText.Text,
@@ -396,8 +416,8 @@ Namespace HotelReservation
                 RefreshNotifications()
 
                 MessageBox.Show(
-                    $"Reservation confirmed: {_latestReceipt.ConfirmationCode}{Environment.NewLine}Email and guest alert notifications were queued locally.",
-                    "Reservation confirmed",
+                    $"Reservation queued: {_latestReceipt.ConfirmationCode}{Environment.NewLine}Please wait for admin confirmation.",
+                    "Reservation queued",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information)
             Catch ex As Exception
@@ -456,7 +476,7 @@ Namespace HotelReservation
 
         Private Sub RenderRooms()
             _roomsPanel.Controls.Clear()
-            Dim guestFilter = CInt(_guestCount.Value)
+            Dim guestFilter = CInt(_availabilityAdults.Value + _availabilityChildren.Value)
             Dim displayRooms = _rooms.Where(Function(room) room.Capacity >= guestFilter).ToList()
 
             If displayRooms.Count = 0 Then
@@ -476,7 +496,7 @@ Namespace HotelReservation
         Private Function MakeRoomCard(room As RoomInfo) As Control
             Dim card = New Panel With {
                 .Width = 410,
-                .Height = 154,
+                .Height = 222,
                 .BackColor = _linen,
                 .Margin = New Padding(0, 0, 0, 12),
                 .Padding = New Padding(14)
@@ -520,8 +540,27 @@ Namespace HotelReservation
             }
             card.Controls.Add(info)
 
+            Dim calendar = New FlowLayoutPanel With {
+                .Location = New Point(14, 118),
+                .Size = New Size(370, 48),
+                .FlowDirection = FlowDirection.LeftToRight,
+                .WrapContents = False
+            }
+            For Each dayInfo In _repository.GetRoomCalendar(room.Id, _checkInPicker.Value.Date, 7)
+                Dim dayLabel = New Label With {
+                    .Text = dayInfo.Date.ToString("MMM d"),
+                    .BackColor = If(dayInfo.IsAvailable, _green, _red),
+                    .ForeColor = Color.White,
+                    .TextAlign = ContentAlignment.MiddleCenter,
+                    .Size = New Size(50, 38),
+                    .Margin = New Padding(0, 0, 3, 0)
+                }
+                calendar.Controls.Add(dayLabel)
+            Next
+            card.Controls.Add(calendar)
+
             Dim selectButton = MakeButton(If(room.IsAvailable, "Select room", "Not available"))
-            selectButton.Location = New Point(14, 116)
+            selectButton.Location = New Point(14, 174)
             selectButton.Size = New Size(130, 32)
             selectButton.Tag = room.Id
             selectButton.Enabled = room.IsAvailable
@@ -540,7 +579,7 @@ Namespace HotelReservation
 
             _roomCombo.Items.Clear()
             Dim availableRooms = _rooms.
-                Where(Function(room) room.IsAvailable AndAlso room.Capacity >= CInt(_bookingGuests.Value)).
+                Where(Function(room) room.IsAvailable AndAlso room.Capacity >= CInt(_bookingAdults.Value + _bookingChildren.Value)).
                 ToList()
 
             For Each room In availableRooms
@@ -640,7 +679,7 @@ Namespace HotelReservation
                 $"Guest: {receipt.GuestName}",
                 $"Room: {receipt.RoomNumber} - {receipt.RoomType}",
                 $"Stay: {receipt.CheckIn:MMM dd, yyyy} to {receipt.CheckOut:MMM dd, yyyy} ({receipt.Nights} night/s)",
-                $"Guests: {receipt.Guests}",
+                $"Guests: {receipt.AdultGuests} adult(s), {receipt.ChildGuests} child(ren) 4+, {receipt.FreeChildGuests} free child pax (1-3)",
                 $"Payment: {receipt.PaymentMethod} - {receipt.PaymentStatus}",
                 $"Reference: {receipt.PaymentReference}",
                 "",
@@ -659,6 +698,7 @@ Namespace HotelReservation
                 row.SubItems.Add(item.GuestName)
                 row.SubItems.Add($"{item.RoomNumber} {item.RoomType}")
                 row.SubItems.Add($"{item.CheckIn:MMM dd, yyyy} - {item.CheckOut:MMM dd, yyyy}")
+                row.SubItems.Add($"{item.AdultGuests} adult, {item.ChildGuests} child 4+, {item.FreeChildGuests} free")
                 row.SubItems.Add($"{item.Total:C2}")
                 row.SubItems.Add(item.Status)
                 _historyList.Items.Add(row)

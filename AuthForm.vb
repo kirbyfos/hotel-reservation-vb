@@ -15,13 +15,11 @@ Namespace HotelReservation
 
         Private _loginUsernameText As TextBox
         Private _loginPasswordText As TextBox
-        Private _loginRoleCombo As ComboBox
         Private _registerFullNameText As TextBox
         Private _registerEmailText As TextBox
         Private _registerPhoneText As TextBox
         Private _registerUsernameText As TextBox
         Private _registerPasswordText As TextBox
-        Private _registerRoleCombo As ComboBox
 
         Public Property LoggedInAccount As AccountInfo
 
@@ -54,7 +52,7 @@ Namespace HotelReservation
             Controls.Add(root)
 
             Dim header = New Label With {
-                .Text = "Casa Reserve" & Environment.NewLine & "Login or register as Admin/User",
+                .Text = "Casa Reserve" & Environment.NewLine & "Login or create a guest account",
                 .Dock = DockStyle.Fill,
                 .ForeColor = _espresso,
                 .Font = New Font("Georgia", 22.0F, FontStyle.Bold, GraphicsUnit.Point)
@@ -73,38 +71,35 @@ Namespace HotelReservation
         End Sub
 
         Private Sub BuildLoginTab(tab As TabPage)
-            Dim panel = New TableLayoutPanel With {.Dock = DockStyle.Top, .ColumnCount = 1, .RowCount = 5, .Height = 310}
-            For index = 0 To 4
+            Dim panel = New TableLayoutPanel With {.Dock = DockStyle.Top, .ColumnCount = 1, .RowCount = 4, .Height = 252}
+            For index = 0 To 3
                 panel.RowStyles.Add(New RowStyle(SizeType.Absolute, 58))
             Next
             tab.Controls.Add(panel)
 
             _loginUsernameText = New TextBox With {.Dock = DockStyle.Fill}
             _loginPasswordText = New TextBox With {.Dock = DockStyle.Fill, .UseSystemPasswordChar = True}
-            _loginRoleCombo = MakeRoleCombo()
-            _loginRoleCombo.SelectedItem = "User"
 
             panel.Controls.Add(WrapField("Username", _loginUsernameText), 0, 0)
             panel.Controls.Add(WrapField("Password", _loginPasswordText), 0, 1)
-            panel.Controls.Add(WrapField("Login as", _loginRoleCombo), 0, 2)
 
             Dim loginButton = MakeButton("Login")
             AddHandler loginButton.Click, AddressOf LoginClicked
-            panel.Controls.Add(loginButton, 0, 3)
+            panel.Controls.Add(loginButton, 0, 2)
 
             Dim note = New Label With {
                 .Text = "Default admin account: username admin / password admin123",
                 .Dock = DockStyle.Fill,
                 .ForeColor = _muted
             }
-            panel.Controls.Add(note, 0, 4)
+            panel.Controls.Add(note, 0, 3)
         End Sub
 
         Private Sub BuildRegisterTab(tab As TabPage)
-            Dim panel = New TableLayoutPanel With {.Dock = DockStyle.Top, .ColumnCount = 2, .RowCount = 5, .Height = 344}
+            Dim panel = New TableLayoutPanel With {.Dock = DockStyle.Top, .ColumnCount = 2, .RowCount = 4, .Height = 280}
             panel.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
             panel.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
-            For index = 0 To 4
+            For index = 0 To 3
                 panel.RowStyles.Add(New RowStyle(SizeType.Absolute, 64))
             Next
             tab.Controls.Add(panel)
@@ -114,15 +109,12 @@ Namespace HotelReservation
             _registerPhoneText = New TextBox With {.Dock = DockStyle.Fill}
             _registerUsernameText = New TextBox With {.Dock = DockStyle.Fill}
             _registerPasswordText = New TextBox With {.Dock = DockStyle.Fill, .UseSystemPasswordChar = True}
-            _registerRoleCombo = MakeRoleCombo()
-            _registerRoleCombo.SelectedItem = "User"
 
             panel.Controls.Add(WrapField("Full name", _registerFullNameText), 0, 0)
             panel.Controls.Add(WrapField("Email", _registerEmailText), 1, 0)
             panel.Controls.Add(WrapField("Phone", _registerPhoneText), 0, 1)
             panel.Controls.Add(WrapField("Username", _registerUsernameText), 1, 1)
             panel.Controls.Add(WrapField("Password", _registerPasswordText), 0, 2)
-            panel.Controls.Add(WrapField("Register as", _registerRoleCombo), 1, 2)
 
             Dim registerButton = MakeButton("Create Account")
             AddHandler registerButton.Click, AddressOf RegisterClicked
@@ -131,9 +123,9 @@ Namespace HotelReservation
         End Sub
 
         Private Sub LoginClicked(sender As Object, e As EventArgs)
-            Dim account = _repository.Authenticate(_loginUsernameText.Text, _loginPasswordText.Text, CStr(_loginRoleCombo.SelectedItem))
+            Dim account = _repository.Authenticate(_loginUsernameText.Text, _loginPasswordText.Text)
             If account Is Nothing Then
-                MessageBox.Show("Invalid username, password, or role.", "Login failed", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                MessageBox.Show("Invalid username or password.", "Login failed", MessageBoxButtons.OK, MessageBoxIcon.Warning)
                 Return
             End If
 
@@ -149,25 +141,15 @@ Namespace HotelReservation
                     _registerEmailText.Text,
                     _registerPhoneText.Text,
                     _registerUsernameText.Text,
-                    _registerPasswordText.Text,
-                    CStr(_registerRoleCombo.SelectedItem))
+                    _registerPasswordText.Text)
 
                 MessageBox.Show("Account created. You can now log in.", "Registration complete", MessageBoxButtons.OK, MessageBoxIcon.Information)
                 _loginUsernameText.Text = account.Username
-                _loginRoleCombo.SelectedItem = account.Role
                 _loginPasswordText.Clear()
             Catch ex As Exception
                 MessageBox.Show(ex.Message, "Registration problem", MessageBoxButtons.OK, MessageBoxIcon.Warning)
             End Try
         End Sub
-
-        Private Function MakeRoleCombo() As ComboBox
-            Dim combo = New ComboBox With {.DropDownStyle = ComboBoxStyle.DropDownList, .Dock = DockStyle.Fill}
-            combo.Items.Add("User")
-            combo.Items.Add("Admin")
-            combo.SelectedIndex = 0
-            Return combo
-        End Function
 
         Private Function MakeButton(text As String) As Button
             Return New Button With {

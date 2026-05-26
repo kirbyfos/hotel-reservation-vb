@@ -108,7 +108,9 @@ Namespace HotelReservation
                 $"Check-in          : {receipt.CheckIn:MMM dd, yyyy}",
                 $"Check-out         : {receipt.CheckOut:MMM dd, yyyy}",
                 $"Nights            : {receipt.Nights}",
-                $"Number of guests  : {receipt.Guests}",
+                $"Adults            : {receipt.AdultGuests}",
+                $"Children 4+       : {receipt.ChildGuests}",
+                $"Free child pax    : {receipt.FreeChildGuests} (ages 1-3)",
                 "",
                 "ADD-ONS"
             }

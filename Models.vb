@@ -17,6 +17,12 @@ Namespace HotelReservation
         End Function
     End Class
 
+    Public Class AvailabilityDayInfo
+        Public Property [Date] As Date
+        Public Property IsAvailable As Boolean
+        Public Property Status As String = ""
+    End Class
+
     Public Class AddOnInfo
         Public Property Id As Integer
         Public Property Name As String = ""
@@ -43,7 +49,9 @@ Namespace HotelReservation
         Public Property RoomId As Integer
         Public Property CheckIn As Date
         Public Property CheckOut As Date
-        Public Property Guests As Integer
+        Public Property AdultGuests As Integer
+        Public Property ChildGuests As Integer
+        Public Property FreeChildGuests As Integer
         Public Property GuestName As String = ""
         Public Property Email As String = ""
         Public Property Phone As String = ""
@@ -52,6 +60,18 @@ Namespace HotelReservation
         Public Property PaymentReference As String = ""
         Public Property Notes As String = ""
         Public Property AddOns As New List(Of SelectedAddOn)
+
+        Public ReadOnly Property ChargeableGuests As Integer
+            Get
+                Return AdultGuests + ChildGuests
+            End Get
+        End Property
+
+        Public ReadOnly Property TotalGuests As Integer
+            Get
+                Return AdultGuests + ChildGuests + FreeChildGuests
+            End Get
+        End Property
     End Class
 
     Public Class AddOnLine
@@ -73,6 +93,9 @@ Namespace HotelReservation
         Public Property CheckOut As Date
         Public Property Nights As Integer
         Public Property Guests As Integer
+        Public Property AdultGuests As Integer
+        Public Property ChildGuests As Integer
+        Public Property FreeChildGuests As Integer
         Public Property ReservationStatus As String = ""
         Public Property RoomSubtotal As Decimal
         Public Property AddOns As New List(Of AddOnLine)
@@ -92,6 +115,9 @@ Namespace HotelReservation
         Public Property CheckIn As Date
         Public Property CheckOut As Date
         Public Property Guests As Integer
+        Public Property AdultGuests As Integer
+        Public Property ChildGuests As Integer
+        Public Property FreeChildGuests As Integer
         Public Property Status As String = ""
         Public Property Total As Decimal
         Public Property CreatedAt As Date

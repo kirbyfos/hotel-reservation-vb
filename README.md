@@ -5,6 +5,9 @@ A minimalist beige and brown hotel reservation prototype built for Microsoft Vis
 ## Features
 
 - Room booking with availability checks
+- Adult guest, child guest, and free child pax counts
+- Children ages 1 to 3 are tracked as free pax
+- Calendar-style room availability indicators using green/red status colors
 - Room type, capacity, amenity, and availability status display
 - Guest information capture
 - Add-ons/reserved amenities
@@ -12,8 +15,10 @@ A minimalist beige and brown hotel reservation prototype built for Microsoft Vis
 - Receipt generation and printable receipt page
 - Reservation history
 - Local email and guest alert notification queue
-- Login and registration for Admin/User accounts
+- Login without role selection; the system opens the correct UI from the saved account role
+- Guest registration and seeded admin account
 - Separate Admin dashboard and User booking interface
+- Pending reservations that require admin confirmation
 - Logout button for switching between Admin and User accounts
 - Local database file created as `hotel_reservation_database.xml` beside the executable
 

@@ -76,6 +76,13 @@ Namespace HotelReservation
             logoutButton.Location = New Point(130, 76)
             AddHandler logoutButton.Click, AddressOf LogoutClicked
 
+            Dim confirmButton = MakeButton("Confirm Selected")
+            confirmButton.Width = 160
+            confirmButton.Height = 34
+            confirmButton.Location = New Point(260, 76)
+            AddHandler confirmButton.Click, AddressOf ConfirmSelectedClicked
+
+            header.Controls.Add(confirmButton)
             header.Controls.Add(logoutButton)
             header.Controls.Add(refreshButton)
             header.Controls.Add(subtitle)
@@ -99,7 +106,7 @@ Namespace HotelReservation
             _reservationsList.Columns.Add("Guest", 180)
             _reservationsList.Columns.Add("Room", 170)
             _reservationsList.Columns.Add("Dates", 220)
-            _reservationsList.Columns.Add("Guests", 80)
+            _reservationsList.Columns.Add("Guests", 210)
             _reservationsList.Columns.Add("Total", 120)
             _reservationsList.Columns.Add("Status", 120)
             reservationsTab.Controls.Add(_reservationsList)
@@ -141,6 +148,22 @@ Namespace HotelReservation
             Close()
         End Sub
 
+        Private Sub ConfirmSelectedClicked(sender As Object, e As EventArgs)
+            If _reservationsList.SelectedItems.Count = 0 Then
+                MessageBox.Show("Please select a pending reservation first.", "No reservation selected", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                Return
+            End If
+
+            Try
+                Dim confirmationCode = CStr(_reservationsList.SelectedItems(0).Tag)
+                _repository.ConfirmReservation(confirmationCode)
+                RefreshDashboard()
+                MessageBox.Show("Reservation confirmed successfully.", "Confirmed", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Catch ex As Exception
+                MessageBox.Show(ex.Message, "Confirmation problem", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            End Try
+        End Sub
+
         Private Sub RefreshDashboard()
             RefreshRooms()
             RefreshReservations()
@@ -165,10 +188,11 @@ Namespace HotelReservation
             _reservationsList.Items.Clear()
             For Each reservation In _repository.GetReservationHistory()
                 Dim row = New ListViewItem(reservation.ConfirmationCode)
+                row.Tag = reservation.ConfirmationCode
                 row.SubItems.Add(reservation.GuestName)
                 row.SubItems.Add(String.Format("{0} {1}", reservation.RoomNumber, reservation.RoomType))
                 row.SubItems.Add(String.Format("{0:MMM dd, yyyy} - {1:MMM dd, yyyy}", reservation.CheckIn, reservation.CheckOut))
-                row.SubItems.Add(reservation.Guests.ToString())
+                row.SubItems.Add(String.Format("{0} adult, {1} child 4+, {2} free", reservation.AdultGuests, reservation.ChildGuests, reservation.FreeChildGuests))
                 row.SubItems.Add(String.Format("{0:C2}", reservation.Total))
                 row.SubItems.Add(reservation.Status)
                 _reservationsList.Items.Add(row)

@@ -33,14 +33,10 @@ Namespace HotelReservation
             SaveDatabase(database)
         End Sub
 
-        Public Function Authenticate(username As String, password As String, role As String) As AccountInfo
+        Public Function Authenticate(username As String, password As String) As AccountInfo
             Dim database = LoadDatabase()
             Dim account = FindAccountByUsername(database, username)
             If account Is Nothing Then
-                Return Nothing
-            End If
-
-            If Not String.Equals(CStr(account("Role")), role, StringComparison.OrdinalIgnoreCase) Then
                 Return Nothing
             End If
 
@@ -51,17 +47,12 @@ Namespace HotelReservation
             Return ToAccountInfo(account)
         End Function
 
-        Public Function RegisterAccount(fullName As String, email As String, phone As String, username As String, password As String, role As String) As AccountInfo
+        Public Function RegisterAccount(fullName As String, email As String, phone As String, username As String, password As String) As AccountInfo
             If String.IsNullOrWhiteSpace(fullName) OrElse
                String.IsNullOrWhiteSpace(email) OrElse
                String.IsNullOrWhiteSpace(username) OrElse
                String.IsNullOrWhiteSpace(password) Then
                 Throw New ArgumentException("Full name, email, username, and password are required.")
-            End If
-
-            If Not String.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase) AndAlso
-               Not String.Equals(role, "User", StringComparison.OrdinalIgnoreCase) Then
-                Throw New ArgumentException("Please choose Admin or User as the account role.")
             End If
 
             Dim database = LoadDatabase()
@@ -78,7 +69,7 @@ Namespace HotelReservation
                 If(String.IsNullOrWhiteSpace(phone), "", phone.Trim()),
                 username.Trim(),
                 HashPassword(password),
-                NormalizeRole(role),
+                "User",
                 ToDateTime(now))
 
             SaveDatabase(database)
@@ -109,7 +100,7 @@ Namespace HotelReservation
 
                 If hasDates AndAlso isAvailable AndAlso HasDateConflict(database, roomId, checkIn.Value, checkOut.Value) Then
                     isAvailable = False
-                    status = "Reserved"
+                    status = "Not Available"
                 End If
 
                 rooms.Add(New RoomInfo With {
@@ -125,6 +116,23 @@ Namespace HotelReservation
             Next
 
             Return rooms.OrderBy(Function(room) room.RoomType).ThenBy(Function(room) room.Rate).ToList()
+        End Function
+
+        Public Function GetRoomCalendar(roomId As Integer, startDate As Date, days As Integer) As List(Of AvailabilityDayInfo)
+            Dim database = LoadDatabase()
+            Dim calendar As New List(Of AvailabilityDayInfo)()
+
+            For offset As Integer = 0 To days - 1
+                Dim currentDate = startDate.Date.AddDays(offset)
+                Dim isAvailable = Not HasDateConflict(database, roomId, currentDate, currentDate.AddDays(1))
+                calendar.Add(New AvailabilityDayInfo With {
+                    .Date = currentDate,
+                    .IsAvailable = isAvailable,
+                    .Status = If(isAvailable, "Available", "Not Available")
+                })
+            Next
+
+            Return calendar
         End Function
 
         Public Function GetAddOns() As List(Of AddOnInfo)
@@ -152,7 +160,7 @@ Namespace HotelReservation
                 Throw New ArgumentException("Please select a valid room.")
             End If
 
-            If CInt(roomRow("Capacity")) < request.Guests Then
+            If CInt(roomRow("Capacity")) < request.ChargeableGuests Then
                 Throw New ArgumentException(String.Format("Room {0} can only fit {1} guest(s).", roomRow("RoomNumber"), roomRow("Capacity")))
             End If
 
@@ -178,17 +186,21 @@ Namespace HotelReservation
                 ToDateTime(now))
 
             Dim reservationId = NextId(database.Tables("Reservations"))
-            database.Tables("Reservations").Rows.Add(
-                reservationId,
-                confirmationCode,
-                request.RoomId,
-                guestId,
-                ToDate(request.CheckIn),
-                ToDate(request.CheckOut),
-                request.Guests,
-                "Reserved",
-                If(String.IsNullOrWhiteSpace(request.Notes), "", request.Notes.Trim()),
-                ToDateTime(now))
+            Dim reservationRow = database.Tables("Reservations").NewRow()
+            reservationRow("Id") = reservationId
+            reservationRow("ConfirmationCode") = confirmationCode
+            reservationRow("RoomId") = request.RoomId
+            reservationRow("GuestId") = guestId
+            reservationRow("CheckIn") = ToDate(request.CheckIn)
+            reservationRow("CheckOut") = ToDate(request.CheckOut)
+            reservationRow("Guests") = request.ChargeableGuests
+            reservationRow("AdultGuests") = request.AdultGuests
+            reservationRow("ChildGuests") = request.ChildGuests
+            reservationRow("FreeChildGuests") = request.FreeChildGuests
+            reservationRow("Status") = "Pending"
+            reservationRow("Notes") = If(String.IsNullOrWhiteSpace(request.Notes), "", request.Notes.Trim())
+            reservationRow("CreatedAt") = ToDateTime(now)
+            database.Tables("Reservations").Rows.Add(reservationRow)
 
             For Each addOn In selectedAddOns
                 database.Tables("ReservationAddOns").Rows.Add(reservationId, addOn.Id, addOn.Quantity)
@@ -203,8 +215,8 @@ Namespace HotelReservation
                 ToDateTime(now),
                 BuildPaymentReference(request.PaymentReference))
 
-            QueueNotification(database, reservationId, "Email", request.Email.Trim(), "Hotel reservation confirmed",
-                String.Format("Hello {0}, your reservation {1} is confirmed for room {2}. Email delivery is simulated locally.",
+            QueueNotification(database, reservationId, "Email", request.Email.Trim(), "Reservation queued for admin verification",
+                String.Format("Hello {0}, your reservation {1} for room {2} is queued and waiting for admin confirmation. Email delivery is simulated locally.",
                               request.GuestName.Trim(), confirmationCode, roomRow("RoomNumber")), now)
 
             QueueNotification(database, reservationId, "Alert", request.Phone.Trim(), "Arrival reminder",
@@ -243,6 +255,9 @@ Namespace HotelReservation
                 .CheckOut = checkOut,
                 .Nights = nights,
                 .Guests = CInt(reservation("Guests")),
+                .AdultGuests = CInt(reservation("AdultGuests")),
+                .ChildGuests = CInt(reservation("ChildGuests")),
+                .FreeChildGuests = CInt(reservation("FreeChildGuests")),
                 .ReservationStatus = CStr(reservation("Status")),
                 .RoomSubtotal = nights * CDec(room("Rate")),
                 .AddOns = addOnLines,
@@ -272,6 +287,9 @@ Namespace HotelReservation
                     .CheckIn = ParseDate(CStr(reservation("CheckIn"))),
                     .CheckOut = ParseDate(CStr(reservation("CheckOut"))),
                     .Guests = CInt(reservation("Guests")),
+                    .AdultGuests = CInt(reservation("AdultGuests")),
+                    .ChildGuests = CInt(reservation("ChildGuests")),
+                    .FreeChildGuests = CInt(reservation("FreeChildGuests")),
                     .Status = CStr(reservation("Status")),
                     .Total = CDec(payment("Amount")),
                     .CreatedAt = ParseDateTime(CStr(reservation("CreatedAt")))
@@ -280,6 +298,24 @@ Namespace HotelReservation
 
             Return history.OrderByDescending(Function(item) item.CreatedAt).ToList()
         End Function
+
+        Public Sub ConfirmReservation(confirmationCode As String)
+            Dim database = LoadDatabase()
+            Dim reservation = FindReservation(database, confirmationCode)
+            If reservation Is Nothing Then
+                Throw New ArgumentException("Please select a valid reservation to confirm.")
+            End If
+
+            If Not String.Equals(CStr(reservation("Status")), "Pending", StringComparison.OrdinalIgnoreCase) Then
+                Throw New InvalidOperationException("Only pending reservations can be confirmed.")
+            End If
+
+            reservation("Status") = "Confirmed"
+            Dim guest = database.Tables("Guests").Rows.Find(CInt(reservation("GuestId")))
+            QueueNotification(database, CInt(reservation("Id")), "Email", CStr(guest("Email")), "Reservation confirmed by admin",
+                String.Format("Your reservation {0} has been confirmed by the hotel admin.", confirmationCode), DateTime.UtcNow)
+            SaveDatabase(database)
+        End Sub
 
         Public Function GetNotifications() As List(Of NotificationInfo)
             Dim database = LoadDatabase()
@@ -306,6 +342,7 @@ Namespace HotelReservation
             If File.Exists(_databasePath) Then
                 database.ReadXml(_databasePath, XmlReadMode.ReadSchema)
                 EnsureAccountsTable(database)
+                EnsureReservationGuestColumns(database)
                 EnsurePrimaryKeys(database)
             End If
 
@@ -349,6 +386,9 @@ Namespace HotelReservation
             reservations.Columns.Add("CheckIn", GetType(String))
             reservations.Columns.Add("CheckOut", GetType(String))
             reservations.Columns.Add("Guests", GetType(Integer))
+            reservations.Columns.Add("AdultGuests", GetType(Integer))
+            reservations.Columns.Add("ChildGuests", GetType(Integer))
+            reservations.Columns.Add("FreeChildGuests", GetType(Integer))
             reservations.Columns.Add("Status", GetType(String))
             reservations.Columns.Add("Notes", GetType(String))
             reservations.Columns.Add("CreatedAt", GetType(String))
@@ -452,8 +492,9 @@ Namespace HotelReservation
 
         Private Shared Function HasDateConflict(database As DataSet, roomId As Integer, checkIn As Date, checkOut As Date) As Boolean
             For Each reservation As DataRow In database.Tables("Reservations").Rows
+                Dim reservationStatus = CStr(reservation("Status"))
                 If CInt(reservation("RoomId")) = roomId AndAlso
-                   (CStr(reservation("Status")) = "Reserved" OrElse CStr(reservation("Status")) = "Checked In") Then
+                   (reservationStatus = "Pending" OrElse reservationStatus = "Confirmed" OrElse reservationStatus = "Reserved" OrElse reservationStatus = "Checked In") Then
                     Dim existingCheckIn = ParseDate(CStr(reservation("CheckIn")))
                     Dim existingCheckOut = ParseDate(CStr(reservation("CheckOut")))
                     If existingCheckIn < checkOut.Date AndAlso existingCheckOut > checkIn.Date Then
@@ -584,8 +625,12 @@ Namespace HotelReservation
                 Throw New ArgumentException("Check-out must be after check-in.")
             End If
 
-            If request.Guests <= 0 Then
-                Throw New ArgumentException("Please enter at least one guest.")
+            If request.AdultGuests <= 0 Then
+                Throw New ArgumentException("Please enter at least one adult guest.")
+            End If
+
+            If request.ChildGuests < 0 OrElse request.FreeChildGuests < 0 Then
+                Throw New ArgumentException("Children guest counts cannot be negative.")
             End If
 
             If String.IsNullOrWhiteSpace(request.GuestName) OrElse
@@ -637,6 +682,31 @@ Namespace HotelReservation
             accounts.Columns.Add("PasswordHash", GetType(String))
             accounts.Columns.Add("Role", GetType(String))
             accounts.Columns.Add("CreatedAt", GetType(String))
+        End Sub
+
+        Private Shared Sub EnsureReservationGuestColumns(database As DataSet)
+            Dim reservations = database.Tables("Reservations")
+            If Not reservations.Columns.Contains("AdultGuests") Then
+                reservations.Columns.Add("AdultGuests", GetType(Integer))
+            End If
+            If Not reservations.Columns.Contains("ChildGuests") Then
+                reservations.Columns.Add("ChildGuests", GetType(Integer))
+            End If
+            If Not reservations.Columns.Contains("FreeChildGuests") Then
+                reservations.Columns.Add("FreeChildGuests", GetType(Integer))
+            End If
+
+            For Each row As DataRow In reservations.Rows
+                If row.IsNull("AdultGuests") Then
+                    row("AdultGuests") = CInt(row("Guests"))
+                End If
+                If row.IsNull("ChildGuests") Then
+                    row("ChildGuests") = 0
+                End If
+                If row.IsNull("FreeChildGuests") Then
+                    row("FreeChildGuests") = 0
+                End If
+            Next
         End Sub
 
         Private Shared Function ToDate(value As Date) As String
