@@ -20,7 +20,6 @@ Namespace HotelReservation
         Private _historyRefreshButton As Button
         Private _editHistoryButton As Button
         Private _printHistoryButton As Button
-        Private _historyDetailPrintButton As Button
         Private _notificationRefreshButton As Button
         Private _tabs As TabControl
 
@@ -318,103 +317,149 @@ Namespace HotelReservation
         Private Function BuildHistoryPage() As Control
             Dim panel = MakeCardPanel()
             panel.Dock = DockStyle.Fill
-            panel.Controls.Add(MakeTitle("Reservation History"))
 
-            Dim split = New SplitContainer With {
+            Dim layout = New TableLayoutPanel With {
                 .Dock = DockStyle.Fill,
-                .Orientation = Orientation.Horizontal,
-                .SplitterDistance = 300,
-                .BackColor = _cream
+                .ColumnCount = 1,
+                .RowCount = 4,
+                .BackColor = _linen,
+                .Padding = New Padding(0)
             }
+            layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 46))
+            layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 60))
+            layout.RowStyles.Add(New RowStyle(SizeType.Percent, 52))
+            layout.RowStyles.Add(New RowStyle(SizeType.Percent, 48))
 
-            Dim topPanel = New Panel With {.Dock = DockStyle.Fill, .BackColor = _linen}
-            Dim actionPanel = New TableLayoutPanel With {
-                .Dock = DockStyle.Top,
-                .Height = 52,
+            Dim title = New Label With {
+                .Text = "Reservation History",
+                .Dock = DockStyle.Fill,
+                .TextAlign = ContentAlignment.MiddleLeft,
+                .ForeColor = _espresso,
+                .Font = New Font("Georgia", 19.0F, FontStyle.Bold, GraphicsUnit.Point)
+            }
+            layout.Controls.Add(title, 0, 0)
+
+            Dim toolbar = New TableLayoutPanel With {
+                .Dock = DockStyle.Fill,
                 .ColumnCount = 4,
-                .Padding = New Padding(0, 0, 0, 6)
+                .RowCount = 1,
+                .Margin = New Padding(0),
+                .Padding = New Padding(0, 6, 0, 6),
+                .BackColor = _sand
             }
-            For i = 0 To 3
-                actionPanel.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 25))
-            Next
+            toolbar.RowStyles.Add(New RowStyle(SizeType.Absolute, 46))
+            toolbar.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 25))
+            toolbar.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 25))
+            toolbar.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 25))
+            toolbar.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 25))
 
-            _historyRefreshButton = MakeHistoryButton("Refresh")
+            _historyRefreshButton = MakeToolbarButton("Refresh")
             AddHandler _historyRefreshButton.Click, AddressOf RefreshHistoryClicked
-            _viewHistoryButton = MakeHistoryButton("View Details")
+            _viewHistoryButton = MakeToolbarButton("View Details")
             AddHandler _viewHistoryButton.Click, AddressOf ViewSelectedHistoryClicked
-            _editHistoryButton = MakeHistoryButton("Edit Reservation")
+            _editHistoryButton = MakeToolbarButton("Edit Reservation")
             AddHandler _editHistoryButton.Click, AddressOf EditSelectedHistoryClicked
-            _printHistoryButton = MakeHistoryButton("Print Receipt")
+            _printHistoryButton = MakeToolbarButton("Print Receipt")
             AddHandler _printHistoryButton.Click, AddressOf PrintSelectedHistoryClicked
-            actionPanel.Controls.Add(_historyRefreshButton, 0, 0)
-            actionPanel.Controls.Add(_viewHistoryButton, 1, 0)
-            actionPanel.Controls.Add(_editHistoryButton, 2, 0)
-            actionPanel.Controls.Add(_printHistoryButton, 3, 0)
-            topPanel.Controls.Add(actionPanel)
+            toolbar.Controls.Add(_historyRefreshButton, 0, 0)
+            toolbar.Controls.Add(_viewHistoryButton, 1, 0)
+            toolbar.Controls.Add(_editHistoryButton, 2, 0)
+            toolbar.Controls.Add(_printHistoryButton, 3, 0)
+            layout.Controls.Add(toolbar, 0, 1)
 
             _historyList = New ListView With {
                 .Dock = DockStyle.Fill,
                 .View = View.Details,
                 .FullRowSelect = True,
-                .GridLines = False,
+                .GridLines = True,
+                .HeaderStyle = ColumnHeaderStyle.Nonclickable,
                 .BackColor = _linen,
-                .ForeColor = _espresso
+                .ForeColor = _espresso,
+                .Margin = New Padding(0, 6, 0, 6)
             }
             _historyList.Columns.Add("Code", 130)
-            _historyList.Columns.Add("Guest", 200)
-            _historyList.Columns.Add("Room", 170)
-            _historyList.Columns.Add("Dates", 210)
-            _historyList.Columns.Add("Guests", 180)
-            _historyList.Columns.Add("Total", 130)
-            _historyList.Columns.Add("Status", 120)
+            _historyList.Columns.Add("Guest", 180)
+            _historyList.Columns.Add("Room", 150)
+            _historyList.Columns.Add("Dates", 200)
+            _historyList.Columns.Add("Guests", 160)
+            _historyList.Columns.Add("Total", 110)
+            _historyList.Columns.Add("Status", 110)
             AddHandler _historyList.SelectedIndexChanged, AddressOf HistorySelectionChanged
-            topPanel.Controls.Add(_historyList)
+            layout.Controls.Add(_historyList, 0, 2)
 
-            Dim bottomPanel = New Panel With {.Dock = DockStyle.Fill, .BackColor = _linen, .Padding = New Padding(0, 8, 0, 0)}
-            Dim bottomActions = New FlowLayoutPanel With {
-                .Dock = DockStyle.Top,
-                .Height = 48,
-                .FlowDirection = FlowDirection.LeftToRight
+            Dim detailsPanel = New TableLayoutPanel With {
+                .Dock = DockStyle.Fill,
+                .ColumnCount = 1,
+                .RowCount = 2,
+                .Margin = New Padding(0, 6, 0, 0),
+                .BackColor = _linen
             }
-            _historyDetailPrintButton = MakeHistoryButton("Print Receipt")
-            AddHandler _historyDetailPrintButton.Click, AddressOf PrintSelectedHistoryClicked
-            bottomActions.Controls.Add(_historyDetailPrintButton)
-            bottomPanel.Controls.Add(bottomActions)
-            bottomPanel.Controls.Add(MakeSectionLabel("Reservation details"))
+            detailsPanel.RowStyles.Add(New RowStyle(SizeType.Absolute, 34))
+            detailsPanel.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+
+            Dim detailsHeader = New Label With {
+                .Text = "Reservation details",
+                .Dock = DockStyle.Fill,
+                .TextAlign = ContentAlignment.MiddleLeft,
+                .ForeColor = _coffee,
+                .Font = New Font("Segoe UI", 10.5F, FontStyle.Bold, GraphicsUnit.Point)
+            }
+            detailsPanel.Controls.Add(detailsHeader, 0, 0)
+
             _historyDetailsBox = New RichTextBox With {
                 .Dock = DockStyle.Fill,
                 .ReadOnly = True,
-                .BorderStyle = BorderStyle.None,
+                .BorderStyle = BorderStyle.FixedSingle,
                 .BackColor = _sand,
                 .ForeColor = _espresso,
                 .Text = "Select a confirmed reservation to view details, print a receipt, or request changes."
             }
-            bottomPanel.Controls.Add(_historyDetailsBox)
+            detailsPanel.Controls.Add(_historyDetailsBox, 0, 1)
+            layout.Controls.Add(detailsPanel, 0, 3)
 
-            split.Panel1.Controls.Add(topPanel)
-            split.Panel2.Controls.Add(bottomPanel)
-            panel.Controls.Add(split)
-
+            panel.Controls.Add(layout)
             Return panel
         End Function
 
         Private Function BuildNotificationPage() As Control
             Dim panel = MakeCardPanel()
             panel.Dock = DockStyle.Fill
-            panel.Controls.Add(MakeTitle("Email Notification and Guest Alerts"))
 
-            Dim actionPanel = New FlowLayoutPanel With {.Dock = DockStyle.Top, .Height = 48, .FlowDirection = FlowDirection.LeftToRight}
-            _notificationRefreshButton = MakeButton("Refresh")
+            Dim layout = New TableLayoutPanel With {
+                .Dock = DockStyle.Fill,
+                .ColumnCount = 1,
+                .RowCount = 3,
+                .BackColor = _linen
+            }
+            layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 46))
+            layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 56))
+            layout.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+
+            Dim title = New Label With {
+                .Text = "Email Notification and Guest Alerts",
+                .Dock = DockStyle.Fill,
+                .TextAlign = ContentAlignment.MiddleLeft,
+                .ForeColor = _espresso,
+                .Font = New Font("Georgia", 19.0F, FontStyle.Bold, GraphicsUnit.Point)
+            }
+            layout.Controls.Add(title, 0, 0)
+
+            Dim actionPanel = New Panel With {.Dock = DockStyle.Fill, .BackColor = _sand, .Padding = New Padding(0, 8, 0, 8)}
+            _notificationRefreshButton = MakeToolbarButton("Refresh")
+            _notificationRefreshButton.Width = 160
+            _notificationRefreshButton.Dock = DockStyle.Left
             AddHandler _notificationRefreshButton.Click, AddressOf RefreshNotificationsClicked
             actionPanel.Controls.Add(_notificationRefreshButton)
-            panel.Controls.Add(actionPanel)
+            layout.Controls.Add(actionPanel, 0, 1)
 
             _notificationList = New ListView With {
                 .Dock = DockStyle.Fill,
                 .View = View.Details,
                 .FullRowSelect = True,
+                .GridLines = True,
                 .BackColor = _linen,
-                .ForeColor = _espresso
+                .ForeColor = _espresso,
+                .Margin = New Padding(0, 6, 0, 0)
             }
             _notificationList.Columns.Add("Code", 120)
             _notificationList.Columns.Add("Channel", 90)
@@ -422,8 +467,9 @@ Namespace HotelReservation
             _notificationList.Columns.Add("Subject", 210)
             _notificationList.Columns.Add("Message", 420)
             _notificationList.Columns.Add("Status", 120)
-            panel.Controls.Add(_notificationList)
+            layout.Controls.Add(_notificationList, 0, 2)
 
+            panel.Controls.Add(layout)
             Return panel
         End Function
 
@@ -547,7 +593,6 @@ Namespace HotelReservation
 
             _editHistoryButton.Enabled = hasSelection AndAlso isConfirmed
             _printHistoryButton.Enabled = hasSelection AndAlso canPrint
-            _historyDetailPrintButton.Enabled = hasSelection AndAlso canPrint
             _viewHistoryButton.Enabled = hasSelection
         End Sub
 
@@ -1026,16 +1071,20 @@ Namespace HotelReservation
             }
         End Function
 
-        Private Function MakeHistoryButton(text As String) As Button
-            Return New Button With {
+        Private Function MakeToolbarButton(text As String) As Button
+            Dim button = New Button With {
                 .Text = text,
                 .BackColor = _coffee,
                 .ForeColor = Color.White,
                 .FlatStyle = FlatStyle.Flat,
                 .Dock = DockStyle.Fill,
-                .Height = 40,
-                .Margin = New Padding(0, 0, 8, 0)
+                .Margin = New Padding(6, 4, 6, 4),
+                .TabStop = True,
+                .Cursor = Cursors.Hand,
+                .Font = New Font("Segoe UI", 9.75F, FontStyle.Bold, GraphicsUnit.Point)
             }
+            button.FlatAppearance.BorderSize = 0
+            Return button
         End Function
 
         Private Function WrapField(labelText As String, control As Control, Optional height As Integer = 58) As Control
