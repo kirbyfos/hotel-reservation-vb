@@ -20,6 +20,7 @@ Namespace HotelReservation
             EnsureDatabaseDirectory()
             Using connection = OpenConnection()
                 CreateSchema(connection)
+                EnsureSchemaUpgrades(connection)
                 If GetRowCount(connection, "Rooms") = 0 Then
                     SeedRooms(connection)
                 End If
@@ -251,7 +252,7 @@ Namespace HotelReservation
             End Using
         End Function
 
-        Public Function GetReservationId(confirmationCode As String, guestEmail As String) As Integer?
+        Public Function GetReservationId(confirmationCode As String, accountId As Integer, guestEmail As String) As Integer?
             Using connection = OpenConnection()
                 connection.Open()
                 Using cmd = connection.CreateCommand()
@@ -260,9 +261,9 @@ Namespace HotelReservation
                         FROM Reservations r
                         INNER JOIN Guests g ON g.Id = r.GuestId
                         WHERE r.ConfirmationCode = @ConfirmationCode COLLATE NOCASE
-                          AND g.Email = @GuestEmail COLLATE NOCASE"
+                          AND " & ReservationOwnedByUserClause()
+                    AddAccountFilterParameters(cmd, accountId, guestEmail)
                     cmd.Parameters.AddWithValue("@ConfirmationCode", confirmationCode)
-                    cmd.Parameters.AddWithValue("@GuestEmail", guestEmail.Trim())
                     Dim result = cmd.ExecuteScalar()
                     If result Is Nothing OrElse result Is DBNull.Value Then
                         Return Nothing
@@ -270,6 +271,17 @@ Namespace HotelReservation
                     Return CInt(result)
                 End Using
             End Using
+        End Function
+
+        Public Function GetReceiptForAccount(confirmationCode As String, accountId As Integer, guestEmail As String) As ReceiptInfo
+            Using connection = OpenConnection()
+                connection.Open()
+                If Not ReservationOwnedByUser(connection, confirmationCode, accountId, guestEmail) Then
+                    Return Nothing
+                End If
+            End Using
+
+            Return GetReceipt(confirmationCode)
         End Function
 
         Public Function GetReceipt(confirmationCode As String) As ReceiptInfo
@@ -348,7 +360,7 @@ Namespace HotelReservation
             End Using
         End Function
 
-        Public Function GetReservationHistory(Optional guestEmail As String = Nothing) As List(Of ReservationHistoryInfo)
+        Public Function GetReservationHistory(Optional accountId As Integer? = Nothing, Optional guestEmail As String = Nothing) As List(Of ReservationHistoryInfo)
             Dim history As New List(Of ReservationHistoryInfo)()
 
             Using connection = OpenConnection()
@@ -373,7 +385,10 @@ Namespace HotelReservation
                         INNER JOIN Guests g ON g.Id = r.GuestId
                         INNER JOIN Rooms rm ON rm.Id = r.RoomId
                         INNER JOIN Payments p ON p.ReservationId = r.Id"
-                    If Not String.IsNullOrWhiteSpace(guestEmail) Then
+                    If accountId.HasValue Then
+                        cmd.CommandText &= " WHERE " & ReservationOwnedByUserClause()
+                        AddAccountFilterParameters(cmd, accountId.Value, guestEmail)
+                    ElseIf Not String.IsNullOrWhiteSpace(guestEmail) Then
                         cmd.CommandText &= " WHERE g.Email = @GuestEmail COLLATE NOCASE"
                         cmd.Parameters.AddWithValue("@GuestEmail", guestEmail.Trim())
                     End If
@@ -452,7 +467,7 @@ Namespace HotelReservation
             End Using
         End Sub
 
-        Public Function GetReservationForEdit(confirmationCode As String, guestEmail As String) As ReservationDetailInfo
+        Public Function GetReservationForEdit(confirmationCode As String, accountId As Integer, guestEmail As String) As ReservationDetailInfo
             Using connection = OpenConnection()
                 connection.Open()
                 Using cmd = connection.CreateCommand()
@@ -478,9 +493,9 @@ Namespace HotelReservation
                         INNER JOIN Guests g ON g.Id = r.GuestId
                         INNER JOIN Payments p ON p.ReservationId = r.Id
                         WHERE r.ConfirmationCode = @ConfirmationCode COLLATE NOCASE
-                          AND g.Email = @GuestEmail COLLATE NOCASE"
+                          AND " & ReservationOwnedByUserClause()
+                    AddAccountFilterParameters(cmd, accountId, guestEmail)
                     cmd.Parameters.AddWithValue("@ConfirmationCode", confirmationCode)
-                    cmd.Parameters.AddWithValue("@GuestEmail", guestEmail.Trim())
 
                     Using reader = cmd.ExecuteReader()
                         If Not reader.Read() Then
@@ -513,14 +528,14 @@ Namespace HotelReservation
             End Using
         End Function
 
-        Public Function UpdateReservation(confirmationCode As String, guestEmail As String, request As ReservationInput) As ReceiptInfo
+        Public Function UpdateReservation(confirmationCode As String, accountId As Integer, guestEmail As String, request As ReservationInput) As ReceiptInfo
             ValidateReservation(request)
 
             Using connection = OpenConnection()
                 connection.Open()
                 Using transaction = connection.BeginTransaction()
                     Try
-                        Dim existing = GetReservationSummary(connection, transaction, confirmationCode, guestEmail)
+                        Dim existing = GetReservationSummary(connection, transaction, confirmationCode, accountId, guestEmail)
                         If existing Is Nothing Then
                             Throw New ArgumentException("Please select a valid reservation to update.")
                         End If
@@ -684,6 +699,62 @@ Namespace HotelReservation
             End If
         End Sub
 
+        Private Shared Sub EnsureSchemaUpgrades(connection As SqliteConnection)
+            If Not ColumnExists(connection, "Reservations", "AccountId") Then
+                ExecuteSeed(connection, "ALTER TABLE Reservations ADD COLUMN AccountId INTEGER;")
+            End If
+
+            ExecuteSeed(connection, "
+                UPDATE Reservations
+                SET AccountId = (
+                    SELECT a.Id
+                    FROM Accounts a
+                    INNER JOIN Guests g ON g.Id = Reservations.GuestId
+                    WHERE a.Email = g.Email COLLATE NOCASE
+                      AND a.Role = 'User'
+                    LIMIT 1
+                )
+                WHERE AccountId IS NULL;")
+        End Sub
+
+        Private Shared Function ColumnExists(connection As SqliteConnection, tableName As String, columnName As String) As Boolean
+            Using cmd = connection.CreateCommand()
+                cmd.CommandText = $"PRAGMA table_info({tableName});"
+                Using reader = cmd.ExecuteReader()
+                    While reader.Read()
+                        If String.Equals(reader.GetString(1), columnName, StringComparison.OrdinalIgnoreCase) Then
+                            Return True
+                        End If
+                    End While
+                End Using
+            End Using
+
+            Return False
+        End Function
+
+        Private Shared Function ReservationOwnedByUserClause() As String
+            Return "(r.AccountId = @AccountId OR (r.AccountId IS NULL AND g.Email = @GuestEmail COLLATE NOCASE))"
+        End Function
+
+        Private Shared Sub AddAccountFilterParameters(cmd As SqliteCommand, accountId As Integer, guestEmail As String)
+            cmd.Parameters.AddWithValue("@AccountId", accountId)
+            cmd.Parameters.AddWithValue("@GuestEmail", If(String.IsNullOrWhiteSpace(guestEmail), "", guestEmail.Trim()))
+        End Sub
+
+        Private Shared Function ReservationOwnedByUser(connection As SqliteConnection, confirmationCode As String, accountId As Integer, guestEmail As String) As Boolean
+            Using cmd = connection.CreateCommand()
+                cmd.CommandText = "
+                    SELECT COUNT(*)
+                    FROM Reservations r
+                    INNER JOIN Guests g ON g.Id = r.GuestId
+                    WHERE r.ConfirmationCode = @ConfirmationCode COLLATE NOCASE
+                      AND " & ReservationOwnedByUserClause()
+                AddAccountFilterParameters(cmd, accountId, guestEmail)
+                cmd.Parameters.AddWithValue("@ConfirmationCode", confirmationCode)
+                Return CInt(cmd.ExecuteScalar()) > 0
+            End Using
+        End Function
+
         Private Shared Sub CreateSchema(connection As SqliteConnection)
             connection.Open()
             Using cmd = connection.CreateCommand()
@@ -732,6 +803,7 @@ Namespace HotelReservation
                         Status TEXT NOT NULL,
                         Notes TEXT,
                         CreatedAt TEXT NOT NULL,
+                        AccountId INTEGER,
                         FOREIGN KEY (RoomId) REFERENCES Rooms(Id),
                         FOREIGN KEY (GuestId) REFERENCES Guests(Id)
                     );
@@ -959,10 +1031,10 @@ Namespace HotelReservation
                 cmd.CommandText = "
                     INSERT INTO Reservations (
                         ConfirmationCode, RoomId, GuestId, CheckIn, CheckOut, Guests,
-                        AdultGuests, ChildGuests, FreeChildGuests, Status, Notes, CreatedAt)
+                        AdultGuests, ChildGuests, FreeChildGuests, Status, Notes, CreatedAt, AccountId)
                     VALUES (
                         @ConfirmationCode, @RoomId, @GuestId, @CheckIn, @CheckOut, @Guests,
-                        @AdultGuests, @ChildGuests, @FreeChildGuests, @Status, @Notes, @CreatedAt);
+                        @AdultGuests, @ChildGuests, @FreeChildGuests, @Status, @Notes, @CreatedAt, @AccountId);
                     SELECT last_insert_rowid();"
                 cmd.Parameters.AddWithValue("@ConfirmationCode", confirmationCode)
                 cmd.Parameters.AddWithValue("@RoomId", request.RoomId)
@@ -976,6 +1048,7 @@ Namespace HotelReservation
                 cmd.Parameters.AddWithValue("@Status", "Pending")
                 cmd.Parameters.AddWithValue("@Notes", If(String.IsNullOrWhiteSpace(request.Notes), "", request.Notes.Trim()))
                 cmd.Parameters.AddWithValue("@CreatedAt", ToDateTime(createdAt))
+                cmd.Parameters.AddWithValue("@AccountId", If(request.AccountId > 0, CObj(request.AccountId), DBNull.Value))
                 Return CInt(cmd.ExecuteScalar())
             End Using
         End Function
@@ -1037,7 +1110,7 @@ Namespace HotelReservation
             Return lines
         End Function
 
-        Private Shared Function GetReservationSummary(connection As SqliteConnection, transaction As SqliteTransaction, confirmationCode As String, Optional guestEmail As String = Nothing) As ReservationSummary
+        Private Shared Function GetReservationSummary(connection As SqliteConnection, transaction As SqliteTransaction, confirmationCode As String, Optional accountId As Integer? = Nothing, Optional guestEmail As String = Nothing) As ReservationSummary
             Using cmd = connection.CreateCommand()
                 cmd.Transaction = transaction
                 cmd.CommandText = "
@@ -1045,7 +1118,10 @@ Namespace HotelReservation
                     FROM Reservations r
                     INNER JOIN Guests g ON g.Id = r.GuestId
                     WHERE r.ConfirmationCode = @ConfirmationCode COLLATE NOCASE"
-                If Not String.IsNullOrWhiteSpace(guestEmail) Then
+                If accountId.HasValue Then
+                    cmd.CommandText &= " AND " & ReservationOwnedByUserClause()
+                    AddAccountFilterParameters(cmd, accountId.Value, guestEmail)
+                ElseIf Not String.IsNullOrWhiteSpace(guestEmail) Then
                     cmd.CommandText &= " AND g.Email = @GuestEmail COLLATE NOCASE"
                     cmd.Parameters.AddWithValue("@GuestEmail", guestEmail.Trim())
                 End If

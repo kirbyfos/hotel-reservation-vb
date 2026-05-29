@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS Reservations (
     Status TEXT NOT NULL,
     Notes TEXT,
     CreatedAt TEXT NOT NULL,
+    AccountId INTEGER,
     FOREIGN KEY (RoomId) REFERENCES Rooms(Id),
     FOREIGN KEY (GuestId) REFERENCES Guests(Id)
 );

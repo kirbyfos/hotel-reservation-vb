@@ -57,6 +57,9 @@ Namespace HotelReservation
         Private _totalLabel As Label
         Private _receiptBox As RichTextBox
         Private _historyList As ListView
+        Private _historyDetailsBox As RichTextBox
+        Private _printHistoryButton As Button
+        Private _viewHistoryButton As Button
         Private _notificationList As ListView
 
         Public Property LogoutRequested As Boolean
@@ -330,14 +333,28 @@ Namespace HotelReservation
             panel.Dock = DockStyle.Fill
             panel.Controls.Add(MakeTitle("Reservation History"))
 
+            Dim split = New SplitContainer With {
+                .Dock = DockStyle.Fill,
+                .Orientation = Orientation.Horizontal,
+                .SplitterDistance = 280,
+                .BackColor = _cream
+            }
+
+            Dim topPanel = New Panel With {.Dock = DockStyle.Fill, .BackColor = _linen}
             Dim actionPanel = New FlowLayoutPanel With {.Dock = DockStyle.Top, .Height = 48, .FlowDirection = FlowDirection.LeftToRight}
             _historyRefreshButton = MakeButton("Refresh")
             AddHandler _historyRefreshButton.Click, AddressOf RefreshHistoryClicked
+            _viewHistoryButton = MakeButton("View Details")
+            AddHandler _viewHistoryButton.Click, AddressOf ViewSelectedHistoryClicked
             _editHistoryButton = MakeButton("Edit Selected")
             AddHandler _editHistoryButton.Click, AddressOf EditSelectedHistoryClicked
+            _printHistoryButton = MakeButton("Print Receipt")
+            AddHandler _printHistoryButton.Click, AddressOf PrintSelectedHistoryClicked
             actionPanel.Controls.Add(_historyRefreshButton)
+            actionPanel.Controls.Add(_viewHistoryButton)
             actionPanel.Controls.Add(_editHistoryButton)
-            panel.Controls.Add(actionPanel)
+            actionPanel.Controls.Add(_printHistoryButton)
+            topPanel.Controls.Add(actionPanel)
 
             _historyList = New ListView With {
                 .Dock = DockStyle.Fill,
@@ -354,7 +371,24 @@ Namespace HotelReservation
             _historyList.Columns.Add("Guests", 180)
             _historyList.Columns.Add("Total", 130)
             _historyList.Columns.Add("Status", 120)
-            panel.Controls.Add(_historyList)
+            AddHandler _historyList.SelectedIndexChanged, AddressOf HistorySelectionChanged
+            topPanel.Controls.Add(_historyList)
+
+            Dim bottomPanel = New Panel With {.Dock = DockStyle.Fill, .BackColor = _linen, .Padding = New Padding(0, 8, 0, 0)}
+            bottomPanel.Controls.Add(MakeSectionLabel("Reservation details"))
+            _historyDetailsBox = New RichTextBox With {
+                .Dock = DockStyle.Fill,
+                .ReadOnly = True,
+                .BorderStyle = BorderStyle.None,
+                .BackColor = _sand,
+                .ForeColor = _espresso,
+                .Text = "Select a reservation to view details. Confirmed reservations can be edited or printed."
+            }
+            bottomPanel.Controls.Add(_historyDetailsBox)
+
+            split.Panel1.Controls.Add(topPanel)
+            split.Panel2.Controls.Add(bottomPanel)
+            panel.Controls.Add(split)
 
             Return panel
         End Function
@@ -446,11 +480,12 @@ Namespace HotelReservation
                     .PaymentMethod = CStr(_paymentCombo.SelectedItem),
                     .PaymentReference = _paymentReferenceText.Text,
                     .Notes = _notesText.Text,
+                    .AccountId = _account.Id,
                     .AddOns = CollectSelectedAddOns()
                 }
 
                 If Not String.IsNullOrWhiteSpace(_editingConfirmationCode) Then
-                    _latestReceipt = _repository.UpdateReservation(_editingConfirmationCode, _account.Email, input)
+                    _latestReceipt = _repository.UpdateReservation(_editingConfirmationCode, _account.Id, _account.Email, input)
                     RenderReceipt(_latestReceipt)
                     ClearEditMode()
                     RefreshRooms()
@@ -504,7 +539,7 @@ Namespace HotelReservation
             End If
 
             Try
-                Dim detail = _repository.GetReservationForEdit(confirmationCode, _account.Email)
+                Dim detail = _repository.GetReservationForEdit(confirmationCode, _account.Id, _account.Email)
                 If detail Is Nothing Then
                     MessageBox.Show("Could not load the selected reservation.", "Reservation not found", MessageBoxButtons.OK, MessageBoxIcon.Warning)
                     Return
@@ -584,6 +619,64 @@ Namespace HotelReservation
             End If
         End Sub
 
+        Private Sub HistorySelectionChanged(sender As Object, e As EventArgs)
+            If _historyList.SelectedItems.Count = 0 Then
+                Return
+            End If
+
+            LoadHistoryDetails(_historyList.SelectedItems(0).Text)
+        End Sub
+
+        Private Sub ViewSelectedHistoryClicked(sender As Object, e As EventArgs)
+            If _historyList.SelectedItems.Count = 0 Then
+                MessageBox.Show("Select a reservation from history first.", "No reservation selected", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                Return
+            End If
+
+            LoadHistoryDetails(_historyList.SelectedItems(0).Text)
+        End Sub
+
+        Private Sub LoadHistoryDetails(confirmationCode As String)
+            Try
+                Dim receipt = _repository.GetReceiptForAccount(confirmationCode, _account.Id, _account.Email)
+                If receipt Is Nothing Then
+                    _historyDetailsBox.Text = "Could not load reservation details."
+                    Return
+                End If
+
+                _historyDetailsBox.Text = FormatReceiptText(receipt)
+            Catch ex As Exception
+                _historyDetailsBox.Text = ex.Message
+            End Try
+        End Sub
+
+        Private Sub PrintSelectedHistoryClicked(sender As Object, e As EventArgs)
+            If _historyList.SelectedItems.Count = 0 Then
+                MessageBox.Show("Select a reservation from history first.", "No reservation selected", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                Return
+            End If
+
+            Dim status = _historyList.SelectedItems(0).SubItems(6).Text
+            If Not String.Equals(status, "Confirmed", StringComparison.OrdinalIgnoreCase) AndAlso
+               Not String.Equals(status, "Change Pending", StringComparison.OrdinalIgnoreCase) Then
+                MessageBox.Show("Print receipt is available after admin confirms the reservation.", "Not confirmed yet", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                Return
+            End If
+
+            Try
+                Dim confirmationCode = _historyList.SelectedItems(0).Text
+                Dim receipt = _repository.GetReceiptForAccount(confirmationCode, _account.Id, _account.Email)
+                If receipt Is Nothing Then
+                    MessageBox.Show("Could not load the selected receipt.", "Receipt not found", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                    Return
+                End If
+
+                ShowReceiptDialog(receipt)
+            Catch ex As Exception
+                MessageBox.Show(ex.Message, "Print problem", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            End Try
+        End Sub
+
         Private Sub RefreshHistoryClicked(sender As Object, e As EventArgs)
             RefreshHistory()
         End Sub
@@ -598,7 +691,17 @@ Namespace HotelReservation
                 Return
             End If
 
-            Using receiptForm As New ReceiptForm(_latestReceipt)
+            If Not String.Equals(_latestReceipt.ReservationStatus, "Confirmed", StringComparison.OrdinalIgnoreCase) AndAlso
+               Not String.Equals(_latestReceipt.ReservationStatus, "Change Pending", StringComparison.OrdinalIgnoreCase) Then
+                MessageBox.Show("Print receipt is available after admin confirms the reservation. You can also print from Reserve History once confirmed.", "Not confirmed yet", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                Return
+            End If
+
+            ShowReceiptDialog(_latestReceipt)
+        End Sub
+
+        Private Sub ShowReceiptDialog(receipt As ReceiptInfo)
+            Using receiptForm As New ReceiptForm(receipt)
                 receiptForm.ShowDialog(Me)
             End Using
         End Sub
@@ -637,7 +740,7 @@ Namespace HotelReservation
             _rooms.Clear()
             Dim excludeId As Integer? = Nothing
             If Not String.IsNullOrWhiteSpace(_editingConfirmationCode) Then
-                excludeId = _repository.GetReservationId(_editingConfirmationCode, _account.Email)
+                excludeId = _repository.GetReservationId(_editingConfirmationCode, _account.Id, _account.Email)
             End If
             _rooms.AddRange(_repository.GetRooms(_bookingCheckInPicker.Value.Date, _bookingCheckOutPicker.Value.Date, excludeId))
             RenderRooms()
@@ -869,28 +972,44 @@ Namespace HotelReservation
         End Sub
 
         Private Sub RenderReceipt(receipt As ReceiptInfo)
+            _receiptBox.Text = FormatReceiptText(receipt)
+        End Sub
+
+        Private Shared Function FormatReceiptText(receipt As ReceiptInfo) As String
             Dim lines As New List(Of String) From {
                 "HOTEL RESERVATION RECEIPT",
                 $"Confirmation: {receipt.ConfirmationCode}",
                 $"Status: {receipt.ReservationStatus}",
                 $"Guest: {receipt.GuestName}",
+                $"Email: {receipt.GuestEmail}",
+                $"Phone: {receipt.GuestPhone}",
                 $"Room: {receipt.RoomNumber} - {receipt.RoomType}",
+                $"Amenities: {receipt.Amenities}",
                 $"Stay: {receipt.CheckIn:MMM dd, yyyy} to {receipt.CheckOut:MMM dd, yyyy} ({receipt.Nights} night/s)",
                 $"Guests: {receipt.AdultGuests} adult(s), {receipt.ChildGuests} child(ren) 4+, {receipt.FreeChildGuests} free child pax (1-3)",
                 $"Payment: {receipt.PaymentMethod} - {receipt.PaymentStatus}",
                 $"Reference: {receipt.PaymentReference}",
                 "",
                 $"Room subtotal: {receipt.RoomSubtotal:C2}",
-                $"Add-ons: {receipt.AddOnSubtotal:C2}",
-                $"TOTAL PAID: {receipt.Total:C2}"
+                $"Add-ons: {receipt.AddOnSubtotal:C2}"
             }
 
-            _receiptBox.Text = String.Join(Environment.NewLine, lines)
-        End Sub
+            If receipt.AddOns.Count > 0 Then
+                lines.Add("")
+                lines.Add("Add-on items:")
+                For Each addOn In receipt.AddOns
+                    lines.Add($"- {addOn.Name} x {addOn.Quantity} = {addOn.Total:C2}")
+                Next
+            End If
+
+            lines.Add("")
+            lines.Add($"TOTAL PAID: {receipt.Total:C2}")
+            Return String.Join(Environment.NewLine, lines)
+        End Function
 
         Private Sub RefreshHistory()
             _historyList.Items.Clear()
-            For Each item In _repository.GetReservationHistory(_account.Email)
+            For Each item In _repository.GetReservationHistory(_account.Id, _account.Email)
                 Dim row = New ListViewItem(item.ConfirmationCode)
                 row.SubItems.Add(item.GuestName)
                 row.SubItems.Add($"{item.RoomNumber} {item.RoomType}")
@@ -900,6 +1019,14 @@ Namespace HotelReservation
                 row.SubItems.Add(item.Status)
                 _historyList.Items.Add(row)
             Next
+
+            If _historyList.Items.Count > 0 AndAlso _historyList.SelectedItems.Count = 0 Then
+                _historyList.Items(0).Selected = True
+            ElseIf _historyList.SelectedItems.Count > 0 Then
+                LoadHistoryDetails(_historyList.SelectedItems(0).Text)
+            Else
+                _historyDetailsBox.Text = "No reservations yet. Queue a booking and it will appear here after admin confirmation."
+            End If
         End Sub
 
         Private Sub RefreshNotifications()

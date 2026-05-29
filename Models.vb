@@ -59,6 +59,7 @@ Namespace HotelReservation
         Public Property PaymentMethod As String = ""
         Public Property PaymentReference As String = ""
         Public Property Notes As String = ""
+        Public Property AccountId As Integer
         Public Property AddOns As New List(Of SelectedAddOn)
 
         Public ReadOnly Property ChargeableGuests As Integer
