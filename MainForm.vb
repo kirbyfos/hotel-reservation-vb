@@ -37,6 +37,7 @@ Namespace HotelReservation
         Private _availabilityAdults As NumericUpDown
         Private _availabilityChildren As NumericUpDown
         Private _availabilityFreeChildren As NumericUpDown
+        Private _availabilitySearchText As TextBox
         Private _availabilityLabel As Label
         Private _roomsPanel As FlowLayoutPanel
         Private _roomCombo As ComboBox
@@ -172,7 +173,7 @@ Namespace HotelReservation
             Dim inputs = New TableLayoutPanel With {
                 .Dock = DockStyle.Top,
                 .ColumnCount = 2,
-                .Height = 218,
+                .Height = 282,
                 .Padding = New Padding(0, 8, 0, 0)
             }
             inputs.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
@@ -180,6 +181,7 @@ Namespace HotelReservation
             inputs.RowStyles.Add(New RowStyle(SizeType.Absolute, 64))
             inputs.RowStyles.Add(New RowStyle(SizeType.Absolute, 64))
             inputs.RowStyles.Add(New RowStyle(SizeType.Absolute, 64))
+            inputs.RowStyles.Add(New RowStyle(SizeType.Absolute, 54))
             panel.Controls.Add(inputs)
 
             _checkInPicker = New DateTimePicker With {.Format = DateTimePickerFormat.Short, .Dock = DockStyle.Fill}
@@ -187,16 +189,20 @@ Namespace HotelReservation
             _availabilityAdults = New NumericUpDown With {.Minimum = 1, .Maximum = 20, .Value = 2, .Dock = DockStyle.Fill}
             _availabilityChildren = New NumericUpDown With {.Minimum = 0, .Maximum = 20, .Value = 0, .Dock = DockStyle.Fill}
             _availabilityFreeChildren = New NumericUpDown With {.Minimum = 0, .Maximum = 20, .Value = 0, .Dock = DockStyle.Fill}
+            _availabilitySearchText = New TextBox With {.Dock = DockStyle.Fill}
+            AddHandler _availabilitySearchText.TextChanged, AddressOf AvailabilitySearchChanged
 
             inputs.Controls.Add(WrapField("Check-in", _checkInPicker), 0, 0)
             inputs.Controls.Add(WrapField("Check-out", _checkOutPicker), 1, 0)
             inputs.Controls.Add(WrapField("Adults", _availabilityAdults), 0, 1)
             inputs.Controls.Add(WrapField("Children 4+ years old", _availabilityChildren), 1, 1)
             inputs.Controls.Add(WrapField("Children 1-3 years old (free pax)", _availabilityFreeChildren), 0, 2)
+            inputs.Controls.Add(WrapField("Search rooms (no., type, amenities)", _availabilitySearchText), 1, 2)
 
             Dim checkButton = MakeButton("Check Availability")
             AddHandler checkButton.Click, AddressOf CheckAvailabilityClicked
-            inputs.Controls.Add(checkButton, 1, 2)
+            inputs.SetColumnSpan(checkButton, 2)
+            inputs.Controls.Add(checkButton, 0, 3)
 
             _availabilityLabel = New Label With {
                 .Text = "Choose dates to see on-time room status.",
@@ -221,9 +227,30 @@ Namespace HotelReservation
         Private Function BuildReservationPanel() As Control
             Dim panel = MakeCardPanel()
             panel.Dock = DockStyle.Fill
-            panel.AutoScroll = True
 
-            panel.Controls.Add(MakeTitle("Room Booking"))
+            Dim layout = New TableLayoutPanel With {
+                .Dock = DockStyle.Fill,
+                .ColumnCount = 1,
+                .RowCount = 12,
+                .BackColor = _linen,
+                .AutoScroll = True
+            }
+            layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 52))
+            layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 34))
+            layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 196))
+            layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 34))
+            layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 168))
+            layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 34))
+            layout.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+            layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 34))
+            layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 236))
+            layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 40))
+            layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 58))
+            layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 34))
+            layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 190))
+            panel.Controls.Add(layout)
+
+            layout.Controls.Add(MakeTitle("Room Booking"), 0, 0)
 
             _roomCombo = New ComboBox With {.DropDownStyle = ComboBoxStyle.DropDownList, .Dock = DockStyle.Fill}
             AddHandler _roomCombo.SelectedIndexChanged, AddressOf TotalChanged
@@ -238,35 +265,35 @@ Namespace HotelReservation
             AddHandler _bookingAdults.ValueChanged, AddressOf BookingGuestsChanged
             AddHandler _bookingChildren.ValueChanged, AddressOf BookingGuestsChanged
 
-            panel.Controls.Add(MakeSectionLabel("Booking details"))
-            panel.Controls.Add(MakeTwoColumnGrid(
+            layout.Controls.Add(MakeSectionLabel("Booking details"), 0, 1)
+            layout.Controls.Add(MakeTwoColumnGrid(
                 WrapField("Room", _roomCombo),
                 WrapField("Adults", _bookingAdults),
                 WrapField("Children 4+ years old", _bookingChildren),
                 WrapField("Children 1-3 years old (free pax)", _bookingFreeChildren),
                 WrapField("Check-in", _bookingCheckInPicker),
-                WrapField("Check-out", _bookingCheckOutPicker)))
+                WrapField("Check-out", _bookingCheckOutPicker)), 0, 2)
 
             _guestNameText = New TextBox With {.Dock = DockStyle.Fill}
             _emailText = New TextBox With {.Dock = DockStyle.Fill}
             _phoneText = New TextBox With {.Dock = DockStyle.Fill}
             _addressText = New TextBox With {.Dock = DockStyle.Fill}
 
-            panel.Controls.Add(MakeSectionLabel("Guest info"))
-            panel.Controls.Add(MakeTwoColumnGrid(
+            layout.Controls.Add(MakeSectionLabel("Guest info"), 0, 3)
+            layout.Controls.Add(MakeTwoColumnGrid(
                 WrapField("Full name", _guestNameText),
                 WrapField("Email", _emailText),
                 WrapField("Phone", _phoneText),
-                WrapField("Address", _addressText)))
+                WrapField("Address", _addressText)), 0, 4)
 
             _addOnsPanel = New FlowLayoutPanel With {
-                .Dock = DockStyle.Top,
-                .AutoSize = True,
+                .Dock = DockStyle.Fill,
+                .AutoScroll = True,
                 .FlowDirection = FlowDirection.TopDown,
                 .WrapContents = False
             }
-            panel.Controls.Add(MakeSectionLabel("Reserved add-ons and amenities"))
-            panel.Controls.Add(_addOnsPanel)
+            layout.Controls.Add(MakeSectionLabel("Reserved add-ons and amenities"), 0, 5)
+            layout.Controls.Add(_addOnsPanel, 0, 6)
 
             _paymentCombo = New ComboBox With {.DropDownStyle = ComboBoxStyle.DropDownList, .Dock = DockStyle.Fill}
             _paymentCombo.Items.AddRange(New Object() {"Cash", "Card", "GCash", "Bank Transfer"})
@@ -274,42 +301,56 @@ Namespace HotelReservation
             _paymentReferenceText = New TextBox With {.Dock = DockStyle.Fill}
             _notesText = New TextBox With {.Dock = DockStyle.Fill, .Multiline = True, .Height = 76}
 
-            panel.Controls.Add(MakeSectionLabel("Payment"))
-            panel.Controls.Add(MakeTwoColumnGrid(
+            Dim paymentLayout = New TableLayoutPanel With {
+                .Dock = DockStyle.Fill,
+                .ColumnCount = 1,
+                .RowCount = 3,
+                .BackColor = _linen
+            }
+            paymentLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, 34))
+            paymentLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, 132))
+            paymentLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+            paymentLayout.Controls.Add(MakeSectionLabel("Payment"), 0, 0)
+            paymentLayout.Controls.Add(MakeTwoColumnGrid(
                 WrapField("Payment method", _paymentCombo),
-                WrapField("Payment reference", _paymentReferenceText)))
-            panel.Controls.Add(WrapField("Notes", _notesText, 104))
+                WrapField("Payment reference", _paymentReferenceText)), 0, 1)
+            paymentLayout.Controls.Add(WrapField("Notes", _notesText, 104), 0, 2)
 
             _totalLabel = New Label With {
-                .Text = "Total: PHP 0.00",
-                .Dock = DockStyle.Top,
-                .Height = 38,
+                .Text = "Total amount: PHP 0.00",
+                .Dock = DockStyle.Fill,
                 .ForeColor = _coffee,
                 .Font = New Font("Segoe UI", 14.0F, FontStyle.Bold, GraphicsUnit.Point),
                 .TextAlign = ContentAlignment.MiddleLeft
             }
-            panel.Controls.Add(_totalLabel)
 
-            Dim actionPanel = New FlowLayoutPanel With {.Dock = DockStyle.Top, .Height = 54, .FlowDirection = FlowDirection.LeftToRight}
+            Dim actionPanel = New FlowLayoutPanel With {
+                .Dock = DockStyle.Fill,
+                .FlowDirection = FlowDirection.LeftToRight,
+                .WrapContents = False,
+                .Padding = New Padding(0, 6, 0, 0)
+            }
             _reserveButton = MakeButton("Queue Reservation")
             AddHandler _reserveButton.Click, AddressOf ConfirmReservationClicked
             Dim printButton = MakeButton("Print Latest Receipt")
             AddHandler printButton.Click, AddressOf PrintLatestReceiptClicked
             actionPanel.Controls.Add(_reserveButton)
             actionPanel.Controls.Add(printButton)
-            panel.Controls.Add(actionPanel)
 
             _receiptBox = New RichTextBox With {
-                .Dock = DockStyle.Top,
-                .Height = 170,
+                .Dock = DockStyle.Fill,
                 .ReadOnly = True,
-                .BorderStyle = BorderStyle.None,
+                .BorderStyle = BorderStyle.FixedSingle,
                 .BackColor = _sand,
                 .ForeColor = _espresso,
-                .Text = "Latest booking receipt will appear here."
+                .Text = "Latest booking receipt will appear here after you queue a reservation."
             }
-            panel.Controls.Add(MakeSectionLabel("Receipt"))
-            panel.Controls.Add(_receiptBox)
+
+            layout.Controls.Add(paymentLayout, 0, 7)
+            layout.Controls.Add(_totalLabel, 0, 8)
+            layout.Controls.Add(actionPanel, 0, 9)
+            layout.Controls.Add(MakeSectionLabel("Latest booking receipt"), 0, 10)
+            layout.Controls.Add(_receiptBox, 0, 11)
 
             Return panel
         End Function
@@ -734,10 +775,25 @@ Namespace HotelReservation
             UpdateTotalPreview()
         End Sub
 
+        Private Sub AvailabilitySearchChanged(sender As Object, e As EventArgs)
+            RenderRooms()
+        End Sub
+
         Private Sub RenderRooms()
             _roomsPanel.Controls.Clear()
             Dim guestFilter = CInt(_availabilityAdults.Value + _availabilityChildren.Value)
+            Dim search = If(_availabilitySearchText Is Nothing, "", _availabilitySearchText.Text.Trim())
             Dim displayRooms = _rooms.Where(Function(room) room.Capacity >= guestFilter).ToList()
+
+            If Not String.IsNullOrWhiteSpace(search) Then
+                Dim term = search.ToLowerInvariant()
+                displayRooms = displayRooms.Where(Function(room)
+                                                      Return room.RoomNumber.ToLowerInvariant().Contains(term) OrElse
+                                                             room.RoomType.ToLowerInvariant().Contains(term) OrElse
+                                                             room.Amenities.ToLowerInvariant().Contains(term) OrElse
+                                                             room.Status.ToLowerInvariant().Contains(term)
+                                                  End Function).ToList()
+            End If
 
             If displayRooms.Count = 0 Then
                 _roomsPanel.Controls.Add(New Label With {
@@ -954,7 +1010,7 @@ Namespace HotelReservation
                 End If
             Next
 
-            _totalLabel.Text = $"Total: {(roomSubtotal + addOnSubtotal):C2}"
+            _totalLabel.Text = $"Total amount: {(roomSubtotal + addOnSubtotal):C2}"
         End Sub
 
         Private Sub RenderReceipt(receipt As ReceiptInfo)

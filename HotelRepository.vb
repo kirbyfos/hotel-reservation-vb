@@ -467,6 +467,48 @@ Namespace HotelReservation
             End Using
         End Sub
 
+        Public Sub CancelReservation(confirmationCode As String)
+            Using connection = OpenConnection()
+                connection.Open()
+                Using transaction = connection.BeginTransaction()
+                    Try
+                        Dim reservation = GetReservationSummary(connection, transaction, confirmationCode)
+                        If reservation Is Nothing Then
+                            Throw New ArgumentException("Please select a valid reservation to cancel.")
+                        End If
+
+                        Dim isPending = String.Equals(reservation.Status, "Pending", StringComparison.OrdinalIgnoreCase)
+                        Dim isChangePending = String.Equals(reservation.Status, "Change Pending", StringComparison.OrdinalIgnoreCase)
+                        If Not isPending AndAlso Not isChangePending Then
+                            Throw New InvalidOperationException("Only pending or change-pending reservations can be cancelled.")
+                        End If
+
+                        Using cmd = connection.CreateCommand()
+                            cmd.Transaction = transaction
+                            cmd.CommandText = "UPDATE Reservations SET Status = 'Cancelled' WHERE Id = @Id"
+                            cmd.Parameters.AddWithValue("@Id", reservation.Id)
+                            cmd.ExecuteNonQuery()
+                        End Using
+
+                        Dim now = DateTime.UtcNow
+                        Dim subject = If(isChangePending, "Change request cancelled", "Reservation cancelled")
+                        Dim message = If(isChangePending,
+                                         String.Format("Your change request for reservation {0} was cancelled by the hotel admin.", confirmationCode),
+                                         String.Format("Your reservation {0} was cancelled by the hotel admin.", confirmationCode))
+                        QueueNotification(connection, transaction, reservation.Id, "Email", reservation.GuestEmail, subject, message, now)
+                        If Not String.IsNullOrWhiteSpace(reservation.GuestPhone) Then
+                            QueueNotification(connection, transaction, reservation.Id, "Alert", reservation.GuestPhone, subject, message, now)
+                        End If
+
+                        transaction.Commit()
+                    Catch
+                        transaction.Rollback()
+                        Throw
+                    End Try
+                End Using
+            End Using
+        End Sub
+
         Public Function GetReservationForEdit(confirmationCode As String, accountId As Integer, guestEmail As String) As ReservationDetailInfo
             Using connection = OpenConnection()
                 connection.Open()

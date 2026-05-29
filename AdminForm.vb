@@ -1,5 +1,6 @@
 Imports System
 Imports System.Drawing
+Imports System.Linq
 Imports System.Windows.Forms
 
 Namespace HotelReservation
@@ -18,6 +19,10 @@ Namespace HotelReservation
         Private _reservationsList As ListView
         Private _accountsList As ListView
         Private _notificationsList As ListView
+        Private _reservationsSearch As TextBox
+        Private _roomsSearch As TextBox
+        Private _accountsSearch As TextBox
+        Private _notificationsSearch As TextBox
 
         Public Property LogoutRequested As Boolean
 
@@ -82,14 +87,21 @@ Namespace HotelReservation
             confirmButton.Anchor = AnchorStyles.Top Or AnchorStyles.Right
             AddHandler confirmButton.Click, AddressOf ConfirmSelectedClicked
 
+            Dim cancelButton = MakeButton("Cancel Pending")
+            cancelButton.Width = 150
+            cancelButton.Height = 34
+            cancelButton.Anchor = AnchorStyles.Top Or AnchorStyles.Right
+            AddHandler cancelButton.Click, AddressOf CancelPendingClicked
+
+            header.Controls.Add(cancelButton)
             header.Controls.Add(confirmButton)
             header.Controls.Add(logoutButton)
             header.Controls.Add(refreshButton)
             header.Controls.Add(subtitle)
             header.Controls.Add(title)
-            PositionHeaderButtons(header, refreshButton, logoutButton, confirmButton)
+            PositionHeaderButtons(header, refreshButton, logoutButton, confirmButton, cancelButton)
             AddHandler header.Resize, Sub(sender, e)
-                                          PositionHeaderButtons(header, refreshButton, logoutButton, confirmButton)
+                                          PositionHeaderButtons(header, refreshButton, logoutButton, confirmButton, cancelButton)
                                       End Sub
             root.Controls.Add(header, 0, 0)
 
@@ -113,7 +125,9 @@ Namespace HotelReservation
             _reservationsList.Columns.Add("Guests", 210)
             _reservationsList.Columns.Add("Total", 120)
             _reservationsList.Columns.Add("Status", 120)
-            reservationsTab.Controls.Add(_reservationsList)
+            Dim reservationsSearchHost = CreateSearchRow("Search reservations (code, guest, room, status)", _reservationsSearch)
+            AddHandler _reservationsSearch.TextChanged, Sub(sender, e) RefreshReservations()
+            reservationsTab.Controls.Add(BuildSearchableTab(reservationsSearchHost, _reservationsList))
 
             _roomsList = CreateListView()
             _roomsList.Columns.Add("Room", 100)
@@ -122,7 +136,9 @@ Namespace HotelReservation
             _roomsList.Columns.Add("Rate", 120)
             _roomsList.Columns.Add("Status", 120)
             _roomsList.Columns.Add("Amenities", 520)
-            roomsTab.Controls.Add(_roomsList)
+            Dim roomsSearchHost = CreateSearchRow("Search rooms (number, type, status, amenities)", _roomsSearch)
+            AddHandler _roomsSearch.TextChanged, Sub(sender, e) RefreshRooms()
+            roomsTab.Controls.Add(BuildSearchableTab(roomsSearchHost, _roomsList))
 
             _accountsList = CreateListView()
             _accountsList.Columns.Add("Name", 220)
@@ -131,7 +147,9 @@ Namespace HotelReservation
             _accountsList.Columns.Add("Email", 230)
             _accountsList.Columns.Add("Phone", 150)
             _accountsList.Columns.Add("Created", 170)
-            accountsTab.Controls.Add(_accountsList)
+            Dim accountsSearchHost = CreateSearchRow("Search accounts (name, username, email, role)", _accountsSearch)
+            AddHandler _accountsSearch.TextChanged, Sub(sender, e) RefreshAccounts()
+            accountsTab.Controls.Add(BuildSearchableTab(accountsSearchHost, _accountsList))
 
             _notificationsList = CreateListView()
             _notificationsList.Columns.Add("Code", 120)
@@ -140,19 +158,50 @@ Namespace HotelReservation
             _notificationsList.Columns.Add("Subject", 220)
             _notificationsList.Columns.Add("Message", 440)
             _notificationsList.Columns.Add("Status", 120)
-            notificationsTab.Controls.Add(_notificationsList)
+            Dim notificationsSearchHost = CreateSearchRow("Search notifications (code, recipient, subject, message)", _notificationsSearch)
+            AddHandler _notificationsSearch.TextChanged, Sub(sender, e) RefreshNotifications()
+            notificationsTab.Controls.Add(BuildSearchableTab(notificationsSearchHost, _notificationsList))
         End Sub
 
         Private Sub RefreshClicked(sender As Object, e As EventArgs)
             RefreshDashboard()
         End Sub
 
-        Private Sub PositionHeaderButtons(header As Control, refreshButton As Button, logoutButton As Button, confirmButton As Button)
+        Private Sub PositionHeaderButtons(header As Control, refreshButton As Button, logoutButton As Button, confirmButton As Button, cancelButton As Button)
             Dim gap = 10
             Dim y = 72
             logoutButton.Location = New Point(header.ClientSize.Width - logoutButton.Width, y)
             confirmButton.Location = New Point(logoutButton.Left - confirmButton.Width - gap, y)
-            refreshButton.Location = New Point(confirmButton.Left - refreshButton.Width - gap, y)
+            cancelButton.Location = New Point(confirmButton.Left - cancelButton.Width - gap, y)
+            refreshButton.Location = New Point(cancelButton.Left - refreshButton.Width - gap, y)
+        End Sub
+
+        Private Sub CancelPendingClicked(sender As Object, e As EventArgs)
+            If _reservationsList.SelectedItems.Count = 0 Then
+                MessageBox.Show("Please select a pending or change-pending reservation first.", "No reservation selected", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                Return
+            End If
+
+            Dim status = _reservationsList.SelectedItems(0).SubItems(6).Text
+            If Not String.Equals(status, "Pending", StringComparison.OrdinalIgnoreCase) AndAlso
+               Not String.Equals(status, "Change Pending", StringComparison.OrdinalIgnoreCase) Then
+                MessageBox.Show("Only pending or change-pending reservations can be cancelled.", "Cannot cancel", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                Return
+            End If
+
+            Dim confirmationCode = CStr(_reservationsList.SelectedItems(0).Tag)
+            Dim prompt = String.Format("Cancel reservation {0}?", confirmationCode)
+            If MessageBox.Show(prompt, "Cancel pending reservation", MessageBoxButtons.YesNo, MessageBoxIcon.Question) <> DialogResult.Yes Then
+                Return
+            End If
+
+            Try
+                _repository.CancelReservation(confirmationCode)
+                RefreshDashboard()
+                MessageBox.Show("Reservation cancelled successfully.", "Cancelled", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Catch ex As Exception
+                MessageBox.Show(ex.Message, "Cancellation problem", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            End Try
         End Sub
 
         Private Sub LogoutClicked(sender As Object, e As EventArgs)
@@ -196,7 +245,12 @@ Namespace HotelReservation
 
         Private Sub RefreshRooms()
             _roomsList.Items.Clear()
+            Dim search = GetSearchText(_roomsSearch)
             For Each room In _repository.GetRooms()
+                If Not MatchesSearch(search, room.RoomNumber, room.RoomType, room.Capacity.ToString(), room.Rate.ToString("C2"), room.Status, room.Amenities) Then
+                    Continue For
+                End If
+
                 Dim row = New ListViewItem(room.RoomNumber)
                 row.SubItems.Add(room.RoomType)
                 row.SubItems.Add(room.Capacity.ToString())
@@ -209,7 +263,15 @@ Namespace HotelReservation
 
         Private Sub RefreshReservations()
             _reservationsList.Items.Clear()
+            Dim search = GetSearchText(_reservationsSearch)
             For Each reservation In _repository.GetReservationHistory()
+                Dim dates = String.Format("{0:MMM dd, yyyy} - {1:MMM dd, yyyy}", reservation.CheckIn, reservation.CheckOut)
+                Dim guests = String.Format("{0} adult, {1} child 4+, {2} free", reservation.AdultGuests, reservation.ChildGuests, reservation.FreeChildGuests)
+                Dim roomLabel = String.Format("{0} {1}", reservation.RoomNumber, reservation.RoomType)
+                If Not MatchesSearch(search, reservation.ConfirmationCode, reservation.GuestName, roomLabel, dates, guests, reservation.Total.ToString("C2"), reservation.Status) Then
+                    Continue For
+                End If
+
                 Dim row = New ListViewItem(reservation.ConfirmationCode)
                 row.Tag = reservation.ConfirmationCode
                 row.SubItems.Add(reservation.GuestName)
@@ -224,7 +286,13 @@ Namespace HotelReservation
 
         Private Sub RefreshAccounts()
             _accountsList.Items.Clear()
+            Dim search = GetSearchText(_accountsSearch)
             For Each account In _repository.GetAccounts()
+                Dim created = String.Format("{0:MMM dd, yyyy hh:mm tt}", account.CreatedAt)
+                If Not MatchesSearch(search, account.FullName, account.Username, account.Role, account.Email, account.Phone, created) Then
+                    Continue For
+                End If
+
                 Dim row = New ListViewItem(account.FullName)
                 row.SubItems.Add(account.Username)
                 row.SubItems.Add(account.Role)
@@ -237,7 +305,12 @@ Namespace HotelReservation
 
         Private Sub RefreshNotifications()
             _notificationsList.Items.Clear()
+            Dim search = GetSearchText(_notificationsSearch)
             For Each notification In _repository.GetNotifications()
+                If Not MatchesSearch(search, notification.ConfirmationCode, notification.Channel, notification.Recipient, notification.Subject, notification.Message, notification.Status) Then
+                    Continue For
+                End If
+
                 Dim row = New ListViewItem(notification.ConfirmationCode)
                 row.SubItems.Add(notification.Channel)
                 row.SubItems.Add(notification.Recipient)
@@ -247,6 +320,62 @@ Namespace HotelReservation
                 _notificationsList.Items.Add(row)
             Next
         End Sub
+
+        Private Shared Function BuildSearchableTab(searchHost As Control, listView As ListView) As Control
+            Dim layout = New TableLayoutPanel With {
+                .Dock = DockStyle.Fill,
+                .ColumnCount = 1,
+                .RowCount = 2,
+                .BackColor = Color.FromArgb(255, 250, 241)
+            }
+            layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 56))
+            layout.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+            layout.Controls.Add(searchHost, 0, 0)
+            layout.Controls.Add(listView, 0, 1)
+            Return layout
+        End Function
+
+        Private Function CreateSearchRow(caption As String, ByRef searchBox As TextBox) As Control
+            searchBox = New TextBox With {.Dock = DockStyle.Fill}
+            Return WrapSearchField(caption, searchBox)
+        End Function
+
+        Private Function WrapSearchField(caption As String, searchBox As TextBox) As Control
+            Dim panel = New TableLayoutPanel With {
+                .Dock = DockStyle.Fill,
+                .ColumnCount = 1,
+                .RowCount = 2,
+                .BackColor = _linen,
+                .Margin = New Padding(0)
+            }
+            panel.RowStyles.Add(New RowStyle(SizeType.Absolute, 20))
+            panel.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+            panel.Controls.Add(New Label With {
+                .Text = caption,
+                .Dock = DockStyle.Fill,
+                .ForeColor = _muted,
+                .TextAlign = ContentAlignment.BottomLeft
+            }, 0, 0)
+            panel.Controls.Add(searchBox, 0, 1)
+            Return panel
+        End Function
+
+        Private Shared Function GetSearchText(searchBox As TextBox) As String
+            If searchBox Is Nothing Then
+                Return ""
+            End If
+
+            Return searchBox.Text.Trim()
+        End Function
+
+        Private Shared Function MatchesSearch(search As String, ParamArray values As String()) As Boolean
+            If String.IsNullOrWhiteSpace(search) Then
+                Return True
+            End If
+
+            Dim term = search.Trim().ToLowerInvariant()
+            Return values.Any(Function(value) Not String.IsNullOrWhiteSpace(value) AndAlso value.ToLowerInvariant().Contains(term))
+        End Function
 
         Private Function CreateListView() As ListView
             Return New ListView With {
