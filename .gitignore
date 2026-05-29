@@ -1,6 +1,7 @@
 bin/
 obj/
 .vs/
+packages/
 *.user
 hotel_reservation.db
 hotel_reservation.db-shm

@@ -132,4 +132,23 @@ Namespace HotelReservation
         Public Property Status As String = ""
         Public Property CreatedAt As Date
     End Class
+
+    Public Class ReservationDetailInfo
+        Public Property ConfirmationCode As String = ""
+        Public Property RoomId As Integer
+        Public Property CheckIn As Date
+        Public Property CheckOut As Date
+        Public Property AdultGuests As Integer
+        Public Property ChildGuests As Integer
+        Public Property FreeChildGuests As Integer
+        Public Property GuestName As String = ""
+        Public Property Email As String = ""
+        Public Property Phone As String = ""
+        Public Property Address As String = ""
+        Public Property PaymentMethod As String = ""
+        Public Property PaymentReference As String = ""
+        Public Property Notes As String = ""
+        Public Property Status As String = ""
+        Public Property AddOns As New List(Of SelectedAddOn)
+    End Class
 End Namespace

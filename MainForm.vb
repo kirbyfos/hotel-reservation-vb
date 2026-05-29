@@ -16,6 +16,13 @@ Namespace HotelReservation
         Private ReadOnly _addOnInputs As New Dictionary(Of Integer, NumericUpDown)()
         Private ReadOnly _addOnChecks As New Dictionary(Of Integer, CheckBox)()
         Private _latestReceipt As ReceiptInfo
+        Private _editingConfirmationCode As String
+        Private _reserveButton As Button
+        Private _editStatusLabel As Label
+        Private _historyRefreshButton As Button
+        Private _editHistoryButton As Button
+        Private _notificationRefreshButton As Button
+        Private _tabs As TabControl
 
         Private ReadOnly _cream As Color = Color.FromArgb(247, 239, 227)
         Private ReadOnly _linen As Color = Color.FromArgb(255, 250, 241)
@@ -89,6 +96,8 @@ Namespace HotelReservation
                 .Dock = DockStyle.Fill,
                 .Font = New Font("Segoe UI", 10.0F, FontStyle.Regular, GraphicsUnit.Point)
             }
+            _tabs = tabs
+            AddHandler tabs.SelectedIndexChanged, AddressOf TabChanged
             root.Controls.Add(tabs, 0, 1)
 
             Dim bookingTab = New TabPage("Booking") With {.BackColor = _cream, .Padding = New Padding(10)}
@@ -280,12 +289,24 @@ Namespace HotelReservation
             }
             panel.Controls.Add(_totalLabel)
 
+            _editStatusLabel = New Label With {
+                .Text = "",
+                .Dock = DockStyle.Top,
+                .Height = 28,
+                .ForeColor = _coffee,
+                .Font = New Font("Segoe UI", 9.5F, FontStyle.Italic, GraphicsUnit.Point)
+            }
+            panel.Controls.Add(_editStatusLabel)
+
             Dim actionPanel = New FlowLayoutPanel With {.Dock = DockStyle.Top, .Height = 54, .FlowDirection = FlowDirection.LeftToRight}
-            Dim reserveButton = MakeButton("Queue Reservation")
-            AddHandler reserveButton.Click, AddressOf ConfirmReservationClicked
+            _reserveButton = MakeButton("Queue Reservation")
+            AddHandler _reserveButton.Click, AddressOf ConfirmReservationClicked
+            Dim cancelEditButton = MakeButton("Cancel Edit")
+            AddHandler cancelEditButton.Click, AddressOf CancelEditClicked
             Dim printButton = MakeButton("Print Latest Receipt")
             AddHandler printButton.Click, AddressOf PrintLatestReceiptClicked
-            actionPanel.Controls.Add(reserveButton)
+            actionPanel.Controls.Add(_reserveButton)
+            actionPanel.Controls.Add(cancelEditButton)
             actionPanel.Controls.Add(printButton)
             panel.Controls.Add(actionPanel)
 
@@ -308,6 +329,15 @@ Namespace HotelReservation
             Dim panel = MakeCardPanel()
             panel.Dock = DockStyle.Fill
             panel.Controls.Add(MakeTitle("Reservation History"))
+
+            Dim actionPanel = New FlowLayoutPanel With {.Dock = DockStyle.Top, .Height = 48, .FlowDirection = FlowDirection.LeftToRight}
+            _historyRefreshButton = MakeButton("Refresh")
+            AddHandler _historyRefreshButton.Click, AddressOf RefreshHistoryClicked
+            _editHistoryButton = MakeButton("Edit Selected")
+            AddHandler _editHistoryButton.Click, AddressOf EditSelectedHistoryClicked
+            actionPanel.Controls.Add(_historyRefreshButton)
+            actionPanel.Controls.Add(_editHistoryButton)
+            panel.Controls.Add(actionPanel)
 
             _historyList = New ListView With {
                 .Dock = DockStyle.Fill,
@@ -333,6 +363,12 @@ Namespace HotelReservation
             Dim panel = MakeCardPanel()
             panel.Dock = DockStyle.Fill
             panel.Controls.Add(MakeTitle("Email Notification and Guest Alerts"))
+
+            Dim actionPanel = New FlowLayoutPanel With {.Dock = DockStyle.Top, .Height = 48, .FlowDirection = FlowDirection.LeftToRight}
+            _notificationRefreshButton = MakeButton("Refresh")
+            AddHandler _notificationRefreshButton.Click, AddressOf RefreshNotificationsClicked
+            actionPanel.Controls.Add(_notificationRefreshButton)
+            panel.Controls.Add(actionPanel)
 
             _notificationList = New ListView With {
                 .Dock = DockStyle.Fill,
@@ -413,6 +449,22 @@ Namespace HotelReservation
                     .AddOns = CollectSelectedAddOns()
                 }
 
+                If Not String.IsNullOrWhiteSpace(_editingConfirmationCode) Then
+                    _latestReceipt = _repository.UpdateReservation(_editingConfirmationCode, _account.Email, input)
+                    RenderReceipt(_latestReceipt)
+                    ClearEditMode()
+                    RefreshRooms()
+                    RefreshHistory()
+                    RefreshNotifications()
+
+                    MessageBox.Show(
+                        $"Changes submitted for {_latestReceipt.ConfirmationCode}.{Environment.NewLine}Please wait for admin approval.",
+                        "Changes submitted",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information)
+                    Return
+                End If
+
                 _latestReceipt = _repository.CreateReservation(input)
                 RenderReceipt(_latestReceipt)
                 ResetAddOnQuantities()
@@ -428,6 +480,116 @@ Namespace HotelReservation
             Catch ex As Exception
                 MessageBox.Show(ex.Message, "Reservation problem", MessageBoxButtons.OK, MessageBoxIcon.Warning)
             End Try
+        End Sub
+
+        Private Sub CancelEditClicked(sender As Object, e As EventArgs)
+            ClearEditMode()
+            PrefillGuestInfo()
+            ResetAddOnQuantities()
+            _receiptBox.Text = "Latest booking receipt will appear here."
+        End Sub
+
+        Private Sub EditSelectedHistoryClicked(sender As Object, e As EventArgs)
+            If _historyList.SelectedItems.Count = 0 Then
+                MessageBox.Show("Select a confirmed reservation from history to edit.", "No reservation selected", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                Return
+            End If
+
+            Dim confirmationCode = _historyList.SelectedItems(0).Text
+            Dim status = _historyList.SelectedItems(0).SubItems(6).Text
+            If Not String.Equals(status, "Confirmed", StringComparison.OrdinalIgnoreCase) AndAlso
+               Not String.Equals(status, "Change Pending", StringComparison.OrdinalIgnoreCase) Then
+                MessageBox.Show("Only confirmed reservations can be edited. Pending reservations are still waiting for admin confirmation.", "Cannot edit", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                Return
+            End If
+
+            Try
+                Dim detail = _repository.GetReservationForEdit(confirmationCode, _account.Email)
+                If detail Is Nothing Then
+                    MessageBox.Show("Could not load the selected reservation.", "Reservation not found", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                    Return
+                End If
+
+                LoadReservationForEdit(detail)
+                _tabs.SelectedIndex = 0
+            Catch ex As Exception
+                MessageBox.Show(ex.Message, "Load problem", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            End Try
+        End Sub
+
+        Private Sub LoadReservationForEdit(detail As ReservationDetailInfo)
+            _editingConfirmationCode = detail.ConfirmationCode
+            _reserveButton.Text = "Submit Changes"
+            _editStatusLabel.Text = $"Editing reservation {detail.ConfirmationCode}. Changes require admin approval."
+
+            _bookingCheckInPicker.Value = detail.CheckIn
+            _bookingCheckOutPicker.Value = detail.CheckOut
+            _bookingAdults.Value = detail.AdultGuests
+            _bookingChildren.Value = detail.ChildGuests
+            _bookingFreeChildren.Value = detail.FreeChildGuests
+            _guestNameText.Text = detail.GuestName
+            _emailText.Text = detail.Email
+            _phoneText.Text = detail.Phone
+            _addressText.Text = detail.Address
+            _notesText.Text = detail.Notes
+
+            Dim paymentIndex = _paymentCombo.Items.IndexOf(detail.PaymentMethod)
+            If paymentIndex >= 0 Then
+                _paymentCombo.SelectedIndex = paymentIndex
+            End If
+            _paymentReferenceText.Text = detail.PaymentReference
+
+            For Each selectedCheck In _addOnChecks.Values
+                selectedCheck.Checked = False
+            Next
+            For Each quantityInput In _addOnInputs.Values
+                quantityInput.Value = 1
+                quantityInput.Enabled = False
+            Next
+            For Each addOn In detail.AddOns
+                If _addOnChecks.ContainsKey(addOn.AddOnId) Then
+                    _addOnChecks(addOn.AddOnId).Checked = True
+                    _addOnInputs(addOn.AddOnId).Enabled = True
+                    _addOnInputs(addOn.AddOnId).Value = Math.Max(1, addOn.Quantity)
+                End If
+            Next
+
+            RefreshRooms()
+            For index = 0 To _roomCombo.Items.Count - 1
+                Dim room = TryCast(_roomCombo.Items(index), RoomInfo)
+                If room IsNot Nothing AndAlso room.Id = detail.RoomId Then
+                    _roomCombo.SelectedIndex = index
+                    Exit For
+                End If
+            Next
+
+            UpdateTotalPreview()
+        End Sub
+
+        Private Sub ClearEditMode()
+            _editingConfirmationCode = Nothing
+            _reserveButton.Text = "Queue Reservation"
+            _editStatusLabel.Text = ""
+        End Sub
+
+        Private Sub TabChanged(sender As Object, e As EventArgs)
+            If _tabs.SelectedTab Is Nothing Then
+                Return
+            End If
+
+            If _tabs.SelectedTab.Text = "Reserve History" Then
+                RefreshHistory()
+            ElseIf _tabs.SelectedTab.Text = "Email & Alerts" Then
+                RefreshNotifications()
+            End If
+        End Sub
+
+        Private Sub RefreshHistoryClicked(sender As Object, e As EventArgs)
+            RefreshHistory()
+        End Sub
+
+        Private Sub RefreshNotificationsClicked(sender As Object, e As EventArgs)
+            RefreshNotifications()
         End Sub
 
         Private Sub PrintLatestReceiptClicked(sender As Object, e As EventArgs)
@@ -473,7 +635,11 @@ Namespace HotelReservation
 
         Private Sub RefreshRooms()
             _rooms.Clear()
-            _rooms.AddRange(_repository.GetRooms(_bookingCheckInPicker.Value.Date, _bookingCheckOutPicker.Value.Date))
+            Dim excludeId As Integer? = Nothing
+            If Not String.IsNullOrWhiteSpace(_editingConfirmationCode) Then
+                excludeId = _repository.GetReservationId(_editingConfirmationCode, _account.Email)
+            End If
+            _rooms.AddRange(_repository.GetRooms(_bookingCheckInPicker.Value.Date, _bookingCheckOutPicker.Value.Date, excludeId))
             RenderRooms()
             PopulateRoomCombo()
             UpdateTotalPreview()
@@ -706,6 +872,7 @@ Namespace HotelReservation
             Dim lines As New List(Of String) From {
                 "HOTEL RESERVATION RECEIPT",
                 $"Confirmation: {receipt.ConfirmationCode}",
+                $"Status: {receipt.ReservationStatus}",
                 $"Guest: {receipt.GuestName}",
                 $"Room: {receipt.RoomNumber} - {receipt.RoomType}",
                 $"Stay: {receipt.CheckIn:MMM dd, yyyy} to {receipt.CheckOut:MMM dd, yyyy} ({receipt.Nights} night/s)",
@@ -723,7 +890,7 @@ Namespace HotelReservation
 
         Private Sub RefreshHistory()
             _historyList.Items.Clear()
-            For Each item In _repository.GetReservationHistory()
+            For Each item In _repository.GetReservationHistory(_account.Email)
                 Dim row = New ListViewItem(item.ConfirmationCode)
                 row.SubItems.Add(item.GuestName)
                 row.SubItems.Add($"{item.RoomNumber} {item.RoomType}")
@@ -737,7 +904,7 @@ Namespace HotelReservation
 
         Private Sub RefreshNotifications()
             _notificationList.Items.Clear()
-            For Each item In _repository.GetNotifications()
+            For Each item In _repository.GetNotifications(_account.Email, _account.Phone)
                 Dim row = New ListViewItem(item.ConfirmationCode)
                 row.SubItems.Add(item.Channel)
                 row.SubItems.Add(item.Recipient)

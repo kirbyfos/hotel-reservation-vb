@@ -162,7 +162,14 @@ Namespace HotelReservation
 
         Private Sub ConfirmSelectedClicked(sender As Object, e As EventArgs)
             If _reservationsList.SelectedItems.Count = 0 Then
-                MessageBox.Show("Please select a pending reservation first.", "No reservation selected", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                MessageBox.Show("Please select a pending or change-pending reservation first.", "No reservation selected", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                Return
+            End If
+
+            Dim status = _reservationsList.SelectedItems(0).SubItems(6).Text
+            If Not String.Equals(status, "Pending", StringComparison.OrdinalIgnoreCase) AndAlso
+               Not String.Equals(status, "Change Pending", StringComparison.OrdinalIgnoreCase) Then
+                MessageBox.Show("Only pending or change-pending reservations can be confirmed.", "Already confirmed", MessageBoxButtons.OK, MessageBoxIcon.Information)
                 Return
             End If
 
@@ -170,7 +177,11 @@ Namespace HotelReservation
                 Dim confirmationCode = CStr(_reservationsList.SelectedItems(0).Tag)
                 _repository.ConfirmReservation(confirmationCode)
                 RefreshDashboard()
-                MessageBox.Show("Reservation confirmed successfully.", "Confirmed", MessageBoxButtons.OK, MessageBoxIcon.Information)
+
+                Dim message = If(String.Equals(status, "Change Pending", StringComparison.OrdinalIgnoreCase),
+                                 "Reservation changes approved successfully.",
+                                 "Reservation confirmed successfully.")
+                MessageBox.Show(message, "Confirmed", MessageBoxButtons.OK, MessageBoxIcon.Information)
             Catch ex As Exception
                 MessageBox.Show(ex.Message, "Confirmation problem", MessageBoxButtons.OK, MessageBoxIcon.Warning)
             End Try

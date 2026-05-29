@@ -1,18 +1,22 @@
 Imports System
 Imports System.Globalization
 Imports System.Windows.Forms
+Imports SQLitePCL
 
 Namespace HotelReservation
     Friend Module Program
         <STAThread>
         Public Sub Main()
+            Batteries.Init()
+
             CultureInfo.DefaultThreadCurrentCulture = New CultureInfo("en-PH")
             CultureInfo.DefaultThreadCurrentUICulture = New CultureInfo("en-PH")
             Application.EnableVisualStyles()
             Application.SetCompatibleTextRenderingDefault(False)
 
-            Dim databasePath = IO.Path.Combine(Application.StartupPath, "hotel_reservation_database.xml")
-            Dim repository = New HotelRepository(databasePath)
+            Dim databasePath = IO.Path.Combine(Application.StartupPath, "hotel_reservation.db")
+            Dim connectionString = $"Data Source={databasePath}"
+            Dim repository = New HotelRepository(connectionString)
             repository.Initialize()
 
             While True
