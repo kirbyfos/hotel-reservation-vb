@@ -16,11 +16,11 @@ Namespace HotelReservation
         Private ReadOnly _addOnInputs As New Dictionary(Of Integer, NumericUpDown)()
         Private ReadOnly _addOnChecks As New Dictionary(Of Integer, CheckBox)()
         Private _latestReceipt As ReceiptInfo
-        Private _editingConfirmationCode As String
         Private _reserveButton As Button
-        Private _editStatusLabel As Label
         Private _historyRefreshButton As Button
         Private _editHistoryButton As Button
+        Private _printHistoryButton As Button
+        Private _historyDetailPrintButton As Button
         Private _notificationRefreshButton As Button
         Private _tabs As TabControl
 
@@ -58,7 +58,6 @@ Namespace HotelReservation
         Private _receiptBox As RichTextBox
         Private _historyList As ListView
         Private _historyDetailsBox As RichTextBox
-        Private _printHistoryButton As Button
         Private _viewHistoryButton As Button
         Private _notificationList As ListView
 
@@ -292,24 +291,12 @@ Namespace HotelReservation
             }
             panel.Controls.Add(_totalLabel)
 
-            _editStatusLabel = New Label With {
-                .Text = "",
-                .Dock = DockStyle.Top,
-                .Height = 28,
-                .ForeColor = _coffee,
-                .Font = New Font("Segoe UI", 9.5F, FontStyle.Italic, GraphicsUnit.Point)
-            }
-            panel.Controls.Add(_editStatusLabel)
-
             Dim actionPanel = New FlowLayoutPanel With {.Dock = DockStyle.Top, .Height = 54, .FlowDirection = FlowDirection.LeftToRight}
             _reserveButton = MakeButton("Queue Reservation")
             AddHandler _reserveButton.Click, AddressOf ConfirmReservationClicked
-            Dim cancelEditButton = MakeButton("Cancel Edit")
-            AddHandler cancelEditButton.Click, AddressOf CancelEditClicked
             Dim printButton = MakeButton("Print Latest Receipt")
             AddHandler printButton.Click, AddressOf PrintLatestReceiptClicked
             actionPanel.Controls.Add(_reserveButton)
-            actionPanel.Controls.Add(cancelEditButton)
             actionPanel.Controls.Add(printButton)
             panel.Controls.Add(actionPanel)
 
@@ -336,24 +323,33 @@ Namespace HotelReservation
             Dim split = New SplitContainer With {
                 .Dock = DockStyle.Fill,
                 .Orientation = Orientation.Horizontal,
-                .SplitterDistance = 280,
+                .SplitterDistance = 300,
                 .BackColor = _cream
             }
 
             Dim topPanel = New Panel With {.Dock = DockStyle.Fill, .BackColor = _linen}
-            Dim actionPanel = New FlowLayoutPanel With {.Dock = DockStyle.Top, .Height = 48, .FlowDirection = FlowDirection.LeftToRight}
-            _historyRefreshButton = MakeButton("Refresh")
+            Dim actionPanel = New TableLayoutPanel With {
+                .Dock = DockStyle.Top,
+                .Height = 52,
+                .ColumnCount = 4,
+                .Padding = New Padding(0, 0, 0, 6)
+            }
+            For i = 0 To 3
+                actionPanel.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 25))
+            Next
+
+            _historyRefreshButton = MakeHistoryButton("Refresh")
             AddHandler _historyRefreshButton.Click, AddressOf RefreshHistoryClicked
-            _viewHistoryButton = MakeButton("View Details")
+            _viewHistoryButton = MakeHistoryButton("View Details")
             AddHandler _viewHistoryButton.Click, AddressOf ViewSelectedHistoryClicked
-            _editHistoryButton = MakeButton("Edit Selected")
+            _editHistoryButton = MakeHistoryButton("Edit Reservation")
             AddHandler _editHistoryButton.Click, AddressOf EditSelectedHistoryClicked
-            _printHistoryButton = MakeButton("Print Receipt")
+            _printHistoryButton = MakeHistoryButton("Print Receipt")
             AddHandler _printHistoryButton.Click, AddressOf PrintSelectedHistoryClicked
-            actionPanel.Controls.Add(_historyRefreshButton)
-            actionPanel.Controls.Add(_viewHistoryButton)
-            actionPanel.Controls.Add(_editHistoryButton)
-            actionPanel.Controls.Add(_printHistoryButton)
+            actionPanel.Controls.Add(_historyRefreshButton, 0, 0)
+            actionPanel.Controls.Add(_viewHistoryButton, 1, 0)
+            actionPanel.Controls.Add(_editHistoryButton, 2, 0)
+            actionPanel.Controls.Add(_printHistoryButton, 3, 0)
             topPanel.Controls.Add(actionPanel)
 
             _historyList = New ListView With {
@@ -375,6 +371,15 @@ Namespace HotelReservation
             topPanel.Controls.Add(_historyList)
 
             Dim bottomPanel = New Panel With {.Dock = DockStyle.Fill, .BackColor = _linen, .Padding = New Padding(0, 8, 0, 0)}
+            Dim bottomActions = New FlowLayoutPanel With {
+                .Dock = DockStyle.Top,
+                .Height = 48,
+                .FlowDirection = FlowDirection.LeftToRight
+            }
+            _historyDetailPrintButton = MakeHistoryButton("Print Receipt")
+            AddHandler _historyDetailPrintButton.Click, AddressOf PrintSelectedHistoryClicked
+            bottomActions.Controls.Add(_historyDetailPrintButton)
+            bottomPanel.Controls.Add(bottomActions)
             bottomPanel.Controls.Add(MakeSectionLabel("Reservation details"))
             _historyDetailsBox = New RichTextBox With {
                 .Dock = DockStyle.Fill,
@@ -382,7 +387,7 @@ Namespace HotelReservation
                 .BorderStyle = BorderStyle.None,
                 .BackColor = _sand,
                 .ForeColor = _espresso,
-                .Text = "Select a reservation to view details. Confirmed reservations can be edited or printed."
+                .Text = "Select a confirmed reservation to view details, print a receipt, or request changes."
             }
             bottomPanel.Controls.Add(_historyDetailsBox)
 
@@ -484,22 +489,6 @@ Namespace HotelReservation
                     .AddOns = CollectSelectedAddOns()
                 }
 
-                If Not String.IsNullOrWhiteSpace(_editingConfirmationCode) Then
-                    _latestReceipt = _repository.UpdateReservation(_editingConfirmationCode, _account.Id, _account.Email, input)
-                    RenderReceipt(_latestReceipt)
-                    ClearEditMode()
-                    RefreshRooms()
-                    RefreshHistory()
-                    RefreshNotifications()
-
-                    MessageBox.Show(
-                        $"Changes submitted for {_latestReceipt.ConfirmationCode}.{Environment.NewLine}Please wait for admin approval.",
-                        "Changes submitted",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Information)
-                    Return
-                End If
-
                 _latestReceipt = _repository.CreateReservation(input)
                 RenderReceipt(_latestReceipt)
                 ResetAddOnQuantities()
@@ -517,13 +506,6 @@ Namespace HotelReservation
             End Try
         End Sub
 
-        Private Sub CancelEditClicked(sender As Object, e As EventArgs)
-            ClearEditMode()
-            PrefillGuestInfo()
-            ResetAddOnQuantities()
-            _receiptBox.Text = "Latest booking receipt will appear here."
-        End Sub
-
         Private Sub EditSelectedHistoryClicked(sender As Object, e As EventArgs)
             If _historyList.SelectedItems.Count = 0 Then
                 MessageBox.Show("Select a confirmed reservation from history to edit.", "No reservation selected", MessageBoxButtons.OK, MessageBoxIcon.Information)
@@ -531,80 +513,42 @@ Namespace HotelReservation
             End If
 
             Dim confirmationCode = _historyList.SelectedItems(0).Text
-            Dim status = _historyList.SelectedItems(0).SubItems(6).Text
-            If Not String.Equals(status, "Confirmed", StringComparison.OrdinalIgnoreCase) AndAlso
-               Not String.Equals(status, "Change Pending", StringComparison.OrdinalIgnoreCase) Then
-                MessageBox.Show("Only confirmed reservations can be edited. Pending reservations are still waiting for admin confirmation.", "Cannot edit", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Dim status = GetSelectedHistoryStatus()
+            If Not String.Equals(status, "Confirmed", StringComparison.OrdinalIgnoreCase) Then
+                MessageBox.Show("Only confirmed reservations can be edited. Pending reservations are waiting for admin confirmation. Change-pending reservations are waiting for admin approval.", "Cannot edit", MessageBoxButtons.OK, MessageBoxIcon.Information)
                 Return
             End If
 
             Try
-                Dim detail = _repository.GetReservationForEdit(confirmationCode, _account.Id, _account.Email)
-                If detail Is Nothing Then
-                    MessageBox.Show("Could not load the selected reservation.", "Reservation not found", MessageBoxButtons.OK, MessageBoxIcon.Warning)
-                    Return
-                End If
-
-                LoadReservationForEdit(detail)
-                _tabs.SelectedIndex = 0
+                Using editForm As New ReservationEditForm(_repository, _account, confirmationCode)
+                    If editForm.ShowDialog(Me) = DialogResult.OK Then
+                        RefreshHistory()
+                        RefreshNotifications()
+                    End If
+                End Using
             Catch ex As Exception
-                MessageBox.Show(ex.Message, "Load problem", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                MessageBox.Show(ex.Message, "Edit problem", MessageBoxButtons.OK, MessageBoxIcon.Warning)
             End Try
         End Sub
 
-        Private Sub LoadReservationForEdit(detail As ReservationDetailInfo)
-            _editingConfirmationCode = detail.ConfirmationCode
-            _reserveButton.Text = "Submit Changes"
-            _editStatusLabel.Text = $"Editing reservation {detail.ConfirmationCode}. Changes require admin approval."
-
-            _bookingCheckInPicker.Value = detail.CheckIn
-            _bookingCheckOutPicker.Value = detail.CheckOut
-            _bookingAdults.Value = detail.AdultGuests
-            _bookingChildren.Value = detail.ChildGuests
-            _bookingFreeChildren.Value = detail.FreeChildGuests
-            _guestNameText.Text = detail.GuestName
-            _emailText.Text = detail.Email
-            _phoneText.Text = detail.Phone
-            _addressText.Text = detail.Address
-            _notesText.Text = detail.Notes
-
-            Dim paymentIndex = _paymentCombo.Items.IndexOf(detail.PaymentMethod)
-            If paymentIndex >= 0 Then
-                _paymentCombo.SelectedIndex = paymentIndex
+        Private Function GetSelectedHistoryStatus() As String
+            If _historyList.SelectedItems.Count = 0 Then
+                Return ""
             End If
-            _paymentReferenceText.Text = detail.PaymentReference
 
-            For Each selectedCheck In _addOnChecks.Values
-                selectedCheck.Checked = False
-            Next
-            For Each quantityInput In _addOnInputs.Values
-                quantityInput.Value = 1
-                quantityInput.Enabled = False
-            Next
-            For Each addOn In detail.AddOns
-                If _addOnChecks.ContainsKey(addOn.AddOnId) Then
-                    _addOnChecks(addOn.AddOnId).Checked = True
-                    _addOnInputs(addOn.AddOnId).Enabled = True
-                    _addOnInputs(addOn.AddOnId).Value = Math.Max(1, addOn.Quantity)
-                End If
-            Next
+            Return _historyList.SelectedItems(0).SubItems(6).Text
+        End Function
 
-            RefreshRooms()
-            For index = 0 To _roomCombo.Items.Count - 1
-                Dim room = TryCast(_roomCombo.Items(index), RoomInfo)
-                If room IsNot Nothing AndAlso room.Id = detail.RoomId Then
-                    _roomCombo.SelectedIndex = index
-                    Exit For
-                End If
-            Next
+        Private Sub UpdateHistoryActionState()
+            Dim hasSelection = _historyList.SelectedItems.Count > 0
+            Dim status = GetSelectedHistoryStatus()
+            Dim isConfirmed = String.Equals(status, "Confirmed", StringComparison.OrdinalIgnoreCase)
+            Dim canPrint = isConfirmed OrElse String.Equals(status, "Change Pending", StringComparison.OrdinalIgnoreCase)
 
-            UpdateTotalPreview()
-        End Sub
-
-        Private Sub ClearEditMode()
-            _editingConfirmationCode = Nothing
-            _reserveButton.Text = "Queue Reservation"
-            _editStatusLabel.Text = ""
+            _editHistoryButton.Enabled = hasSelection AndAlso isConfirmed
+            _printHistoryButton.Enabled = hasSelection AndAlso canPrint
+            _historyDetailPrintButton.Enabled = hasSelection AndAlso canPrint
+            _viewHistoryButton.Enabled = hasSelection
         End Sub
 
         Private Sub TabChanged(sender As Object, e As EventArgs)
@@ -620,6 +564,7 @@ Namespace HotelReservation
         End Sub
 
         Private Sub HistorySelectionChanged(sender As Object, e As EventArgs)
+            UpdateHistoryActionState()
             If _historyList.SelectedItems.Count = 0 Then
                 Return
             End If
@@ -656,10 +601,10 @@ Namespace HotelReservation
                 Return
             End If
 
-            Dim status = _historyList.SelectedItems(0).SubItems(6).Text
+            Dim status = GetSelectedHistoryStatus()
             If Not String.Equals(status, "Confirmed", StringComparison.OrdinalIgnoreCase) AndAlso
                Not String.Equals(status, "Change Pending", StringComparison.OrdinalIgnoreCase) Then
-                MessageBox.Show("Print receipt is available after admin confirms the reservation.", "Not confirmed yet", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                MessageBox.Show("Print receipt is available after the admin confirms the reservation.", "Not confirmed yet", MessageBoxButtons.OK, MessageBoxIcon.Information)
                 Return
             End If
 
@@ -738,11 +683,7 @@ Namespace HotelReservation
 
         Private Sub RefreshRooms()
             _rooms.Clear()
-            Dim excludeId As Integer? = Nothing
-            If Not String.IsNullOrWhiteSpace(_editingConfirmationCode) Then
-                excludeId = _repository.GetReservationId(_editingConfirmationCode, _account.Id, _account.Email)
-            End If
-            _rooms.AddRange(_repository.GetRooms(_bookingCheckInPicker.Value.Date, _bookingCheckOutPicker.Value.Date, excludeId))
+            _rooms.AddRange(_repository.GetRooms(_bookingCheckInPicker.Value.Date, _bookingCheckOutPicker.Value.Date))
             RenderRooms()
             PopulateRoomCombo()
             UpdateTotalPreview()
@@ -1027,6 +968,8 @@ Namespace HotelReservation
             Else
                 _historyDetailsBox.Text = "No reservations yet. Queue a booking and it will appear here after admin confirmation."
             End If
+
+            UpdateHistoryActionState()
         End Sub
 
         Private Sub RefreshNotifications()
@@ -1080,6 +1023,18 @@ Namespace HotelReservation
                 .Height = 40,
                 .Width = 170,
                 .Margin = New Padding(0, 6, 8, 6)
+            }
+        End Function
+
+        Private Function MakeHistoryButton(text As String) As Button
+            Return New Button With {
+                .Text = text,
+                .BackColor = _coffee,
+                .ForeColor = Color.White,
+                .FlatStyle = FlatStyle.Flat,
+                .Dock = DockStyle.Fill,
+                .Height = 40,
+                .Margin = New Padding(0, 0, 8, 0)
             }
         End Function
 

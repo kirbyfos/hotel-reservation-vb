@@ -43,17 +43,29 @@ Namespace HotelReservation
 
             Dim actionPanel = New FlowLayoutPanel With {
                 .Dock = DockStyle.Fill,
-                .FlowDirection = FlowDirection.RightToLeft
+                .FlowDirection = FlowDirection.RightToLeft,
+                .Padding = New Padding(0, 0, 0, 8)
             }
+            Dim closeButton = New Button With {
+                .Text = "Close",
+                .BackColor = _coffee,
+                .ForeColor = Color.White,
+                .FlatStyle = FlatStyle.Flat,
+                .Width = 120,
+                .Height = 40
+            }
+            AddHandler closeButton.Click, Sub(sender, e) Close()
             Dim printButton = New Button With {
-                .Text = "Print receipt",
+                .Text = "Print Receipt",
                 .BackColor = _coffee,
                 .ForeColor = Color.White,
                 .FlatStyle = FlatStyle.Flat,
                 .Width = 150,
-                .Height = 38
+                .Height = 40,
+                .Margin = New Padding(0, 0, 10, 0)
             }
             AddHandler printButton.Click, AddressOf PrintClicked
+            actionPanel.Controls.Add(closeButton)
             actionPanel.Controls.Add(printButton)
             root.Controls.Add(actionPanel, 0, 0)
 
@@ -70,12 +82,18 @@ Namespace HotelReservation
         End Sub
 
         Private Sub PrintClicked(sender As Object, e As EventArgs)
-            Using dialog As New PrintDialog()
-                dialog.Document = _printDocument
-                If dialog.ShowDialog(Me) = DialogResult.OK Then
-                    _printDocument.Print()
-                End If
-            End Using
+            Try
+                Using dialog As New PrintDialog()
+                    dialog.Document = _printDocument
+                    dialog.UseEXDialog = True
+                    If dialog.ShowDialog(Me) = DialogResult.OK Then
+                        _printDocument.Print()
+                        MessageBox.Show("Receipt sent to the printer.", "Print complete", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                    End If
+                End Using
+            Catch ex As Exception
+                MessageBox.Show(ex.Message, "Print problem", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            End Try
         End Sub
 
         Private Sub PrintPage(sender As Object, e As PrintPageEventArgs)

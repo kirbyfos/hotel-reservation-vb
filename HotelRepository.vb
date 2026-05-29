@@ -521,6 +521,10 @@ Namespace HotelReservation
                             .PaymentReference = GetStringOrEmpty(reader, 15)
                         }
 
+                        If Not String.Equals(detail.Status, "Confirmed", StringComparison.OrdinalIgnoreCase) Then
+                            Return Nothing
+                        End If
+
                         detail.AddOns = GetReservationAddOnSelections(connection, reservationId)
                         Return detail
                     End Using
@@ -540,8 +544,7 @@ Namespace HotelReservation
                             Throw New ArgumentException("Please select a valid reservation to update.")
                         End If
 
-                        If Not String.Equals(existing.Status, "Confirmed", StringComparison.OrdinalIgnoreCase) AndAlso
-                           Not String.Equals(existing.Status, "Change Pending", StringComparison.OrdinalIgnoreCase) Then
+                        If Not String.Equals(existing.Status, "Confirmed", StringComparison.OrdinalIgnoreCase) Then
                             Throw New InvalidOperationException("Only confirmed reservations can be updated.")
                         End If
 
@@ -733,7 +736,7 @@ Namespace HotelReservation
         End Function
 
         Private Shared Function ReservationOwnedByUserClause() As String
-            Return "(r.AccountId = @AccountId OR (r.AccountId IS NULL AND g.Email = @GuestEmail COLLATE NOCASE))"
+            Return "(r.AccountId = @AccountId OR g.Email = @GuestEmail COLLATE NOCASE)"
         End Function
 
         Private Shared Sub AddAccountFilterParameters(cmd As SqliteCommand, accountId As Integer, guestEmail As String)

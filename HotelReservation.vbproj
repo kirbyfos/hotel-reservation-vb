@@ -94,6 +94,9 @@
     <Compile Include="ReceiptForm.vb">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="ReservationEditForm.vb">
+      <SubType>Form</SubType>
+    </Compile>
   </ItemGroup>
   <ItemGroup>
     <Import Include="Microsoft.VisualBasic" />
